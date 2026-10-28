@@ -1,0 +1,37 @@
+[package]
+name = "winpulse-optimizer"
+version = "1.0.0"
+description = "WinPulse Optimizer - High Performance Windows System Optimizer"
+authors = ["WinPulse Team"]
+edition = "2021"
+
+[lib]
+name = "app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1", features = ["full"] }
+sysinfo = "0.30"
+winreg = "0.52"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
+thiserror = "1.0"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_System_Threading",
+    "Win32_System_ProcessStatus",
+    "Win32_System_Services",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Restore",
+    "Win32_UI_Shell",
+    "Win32_System_Registry",
+    "Win32_System_Power"
+] }

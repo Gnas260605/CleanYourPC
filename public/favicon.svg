@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="wp-grad" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#06B6D4" />
+      <stop offset="0.5" stop-color="#8B5CF6" />
+      <stop offset="1" stop-color="#3B82F6" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="#0B0F19" />
+  <rect x="1" y="1" width="62" height="62" rx="15" stroke="url(#wp-grad)" stroke-width="2" stroke-opacity="0.6" />
+  <path d="M14 34 L23 34 L28 18 L36 46 L42 28 L46 34 L50 34" stroke="url(#wp-grad)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" />
+  <circle cx="36" cy="46" r="3" fill="#22D3EE" />
+  <circle cx="28" cy="18" r="3" fill="#A78BFA" />
+</svg>
