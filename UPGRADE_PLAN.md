@@ -9,7 +9,7 @@
 
 - [x] `git init`, `.gitignore` (bỏ `node_modules/`, `dist/`, `src-tauri/target/`).
 - [x] `CLAUDE.md` + skills trong `.claude/skills/` cho agent code trên cloud.
-- [ ] GitHub Actions `windows-latest`: `npm ci && npm run build`, `cargo test` trong `src-tauri/`, `cargo clippy -- -D warnings`.
+- [x] GitHub Actions `windows-latest` (`.github/workflows/ci.yml`): `npm ci && npm run build`, `cargo test` trong `src-tauri/`, `cargo clippy -- -D warnings`.
   - Lý do: môi trường cloud là Linux, **không chạy được test Rust** (crate `windows`, `std::os::windows`). CI Windows là nơi xác nhận thật.
 
 ---
