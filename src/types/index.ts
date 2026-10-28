@@ -210,4 +210,52 @@ export interface ServiceChangeResult {
   message: string;
 }
 
-export type ActiveTab = "dashboard" | "startup" | "process" | "cleaner" | "services";
+// --- Disk Analyzer (src-tauri/src/disk_analyzer.rs + folder_knowledge.rs) ---
+export type FolderSafety = "Safe" | "Caution" | "UseTool" | "Keep" | "Unknown";
+export type DiskItemAction = "recycle" | "show_guide" | "open_only";
+
+export interface LargeFolderItem {
+  id: string;
+  path: string;
+  is_file: boolean;
+  size_bytes: number;
+  file_count: number;
+  /** Epoch giây của tệp mới nhất bên trong */
+  last_modified: number | null;
+  kind: string;
+  title: string;
+  description: string;
+  consequence: string;
+  how_to_clean: string;
+  safety: FolderSafety;
+  action: DiskItemAction;
+  owner_app: string | null;
+}
+
+export interface DiskScanProgress {
+  current_path: string;
+  dirs_scanned: number;
+  bytes_counted: number;
+}
+
+export interface DiskScanComplete {
+  scan_id: string;
+  items: LargeFolderItem[];
+  cancelled: boolean;
+  elapsed_ms: number;
+  roots: string[];
+  dirs_scanned: number;
+  bytes_counted: number;
+  volume_total_bytes: number;
+  error: string | null;
+}
+
+export interface RecycleResult {
+  recycled_ids: string[];
+  recycled_count: number;
+  recycled_bytes: number;
+  failed_count: number;
+  errors: string[];
+}
+
+export type ActiveTab = "dashboard" | "startup" | "process" | "cleaner" | "analyzer" | "services";

@@ -4,7 +4,8 @@ import {
   Rocket, 
   ShieldAlert, 
   Trash2, 
-  SlidersHorizontal 
+  SlidersHorizontal,
+  HardDrive
 } from "lucide-react";
 import { ActiveTab } from "@/types";
 import { formatBytes } from "@/utils/formatters";
@@ -59,6 +60,11 @@ export const Navbar: React.FC<NavbarProps> = ({
       icon: Trash2,
       badge: junkBytes ? formatBytes(junkBytes) : undefined,
       badgeColor: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
+    },
+    {
+      id: "analyzer",
+      label: "Phân tích ổ đĩa",
+      icon: HardDrive,
     },
     {
       id: "services",

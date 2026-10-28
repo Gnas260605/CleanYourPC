@@ -7,6 +7,7 @@ import { StartupManager } from "./components/startup/StartupManager";
 import { ProcessGuardian } from "./components/process/ProcessGuardian";
 import { SafeCleaner } from "./components/cleaner/SafeCleaner";
 import { ServicesOptimizer } from "./components/services/ServicesOptimizer";
+import { DiskAnalyzer } from "./components/analyzer/DiskAnalyzer";
 import { SettingsModal } from "./components/settings/SettingsModal";
 import { HistoryModal } from "./components/history/HistoryModal";
 import { useHardwareMetrics, isTauriContext } from "./hooks/useHardwareMetrics";
@@ -135,6 +136,11 @@ export function App() {
         {activeTab === "cleaner" && (
           <SafeCleaner onNotify={showNotification} onScanComplete={badges.onJunkScanned} />
         )}
+
+        {/* Giữ Disk Analyzer luôn mount để phiên quét đang chạy không mất kết quả khi chuyển tab */}
+        <div hidden={activeTab !== "analyzer"}>
+          <DiskAnalyzer onNotify={showNotification} />
+        </div>
 
         {activeTab === "services" && (
           <ServicesOptimizer onNotify={showNotification} />

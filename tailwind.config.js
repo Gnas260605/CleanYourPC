@@ -49,6 +49,7 @@ export default {
         'spin-slow': 'spin 12s linear infinite',
         'radar': 'radar 3s ease-in-out infinite',
         'scan': 'scan 2s ease-in-out infinite',
+        'indeterminate': 'indeterminate 1.4s ease-in-out infinite',
       },
       keyframes: {
         radar: {
@@ -58,6 +59,10 @@ export default {
         scan: {
           '0%, 100%': { transform: 'translateY(-100%)' },
           '50%': { transform: 'translateY(100%)' },
+        },
+        indeterminate: {
+          '0%': { transform: 'translateX(-100%)' },
+          '100%': { transform: 'translateX(300%)' },
         }
       }
     },

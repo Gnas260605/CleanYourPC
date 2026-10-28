@@ -7,6 +7,9 @@ import {
   ServiceInfo,
   ServiceChangeResult,
   OptimizationLog,
+  DiskScanProgress,
+  DiskScanComplete,
+  RecycleResult,
 } from "@/types";
 
 // HTTP server chỉ đọc, chỉ chạy khi backend là bản debug (xem src-tauri/src/http_server.rs)
@@ -141,4 +144,40 @@ export function restoreServiceStartup(name: string): Promise<ServiceChangeResult
 /** Thu gọn Working Set các tiến trình không cốt lõi. Backend tự ghi lịch sử và trả về bản ghi thật */
 export function triggerQuickBoost(): Promise<OptimizationLog> {
   return mutating<OptimizationLog>("trigger_quick_boost");
+}
+
+// 7. DISK ANALYZER (chỉ có trong app desktop: quét lâu, dùng sự kiện Tauri)
+/** Bắt đầu quét nền. `roots` rỗng/undefined = thư mục mặc định. Kết quả đến qua onDiskScanComplete */
+export function startLargeFolderScan(roots: string[] | undefined, minSizeMb: number): Promise<void> {
+  return mutating<void>("start_large_folder_scan", {
+    roots: roots && roots.length > 0 ? roots : null,
+    minSizeMb,
+  });
+}
+
+export function cancelLargeFolderScan(): Promise<void> {
+  return mutating<void>("cancel_large_folder_scan");
+}
+
+/** Chuyển các mục Safe/Caution vào Thùng rác — chỉ gửi id trong phiên quét */
+export function recycleLargeFolderItems(scanId: string, itemIds: string[]): Promise<RecycleResult> {
+  return mutating<RecycleResult>("recycle_large_folder_items", { scanId, itemIds });
+}
+
+export function openDiskItemInExplorer(scanId: string, itemId: string): Promise<void> {
+  return mutating<void>("open_disk_item_in_explorer", { scanId, itemId });
+}
+
+async function listenEvent<T>(event: string, cb: (payload: T) => void): Promise<() => void> {
+  if (!isTauriContext()) return () => undefined;
+  const { listen } = await import("@tauri-apps/api/event");
+  return listen<T>(event, (e) => cb(e.payload));
+}
+
+export function onDiskScanProgress(cb: (p: DiskScanProgress) => void): Promise<() => void> {
+  return listenEvent<DiskScanProgress>("disk-scan-progress", cb);
+}
+
+export function onDiskScanComplete(cb: (p: DiskScanComplete) => void): Promise<() => void> {
+  return listenEvent<DiskScanComplete>("disk-scan-complete", cb);
 }

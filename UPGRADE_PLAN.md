@@ -67,12 +67,12 @@ Sửa:
 Người dùng thấy **thư mục nào đang chiếm nhiều dung lượng**, **nó là gì**, **xóa được không**, và **xóa thế nào cho đúng** — mặc định không xóa gì, mọi thao tác đều có xác nhận.
 
 ### Backend — `src-tauri/src/disk_analyzer.rs`
-- Command `start_large_folder_scan(roots?, min_size_mb = 500)`:
+- [x] Command `start_large_folder_scan(roots?, min_size_mb = 500)`:
   - Mặc định quét: `%USERPROFILE%` (depth 3), `%LOCALAPPDATA%`, `%APPDATA%`, `C:\ProgramData`, `C:\Windows\SoftwareDistribution\Download`, `C:\Windows.old`, file lớn ở gốc ổ (`hiberfil.sys`, `pagefile.sys`).
   - Chạy trên `tokio::task::spawn_blocking`, không follow symlink/junction, bỏ qua lỗi quyền truy cập.
   - Gửi tiến độ qua event `disk-scan-progress` (path hiện tại, số thư mục đã quét, byte đã đếm); kết quả qua `disk-scan-complete`.
   - `cancel_large_folder_scan()` dùng `AtomicBool`.
-- Kết quả `LargeFolderItem { id, path, size_bytes, file_count, last_modified, kind, title, description, safety, how_to_clean, action }`.
+- [x] Kết quả `LargeFolderItem { id, path, size_bytes, file_count, last_modified, kind, title, description, safety, how_to_clean, action }`.
 
 ### Cơ sở tri thức — `src-tauri/src/folder_knowledge.rs`
 Bảng luật match theo pattern path → mô tả tiếng Việt + mức an toàn. 4 mức:
@@ -85,7 +85,7 @@ Bảng luật match theo pattern path → mô tả tiếng Việt + mức an to�
 | 🔴 `Keep` | Dữ liệu cá nhân / hệ thống | Chỉ "Mở trong Explorer", không có nút xóa |
 | ⚪ `Unknown` | Không nhận diện được | Chỉ "Mở trong Explorer" + hiển thị app sở hữu nếu đoán được |
 
-Bộ luật khởi đầu (mỗi luật có test):
+- [x] Bộ luật khởi đầu (mỗi luật có test) — `folder_knowledge.rs`, 10 test:
 - 🟢 `npm-cache`, `pnpm store`, `pip\cache`, `.cargo\registry\cache`, `NuGet\v3-cache`, `Yarn\Cache`, `go-build`, `NVIDIA\DXCache`, `D3DSCache`, `Discord\Cache`, `Code\Cache`/`CachedData`, `Microsoft\Teams\Cache`, browser `Cache`/`Code Cache` (KHÔNG đụng `Cookies`, `Login Data`...), `%TEMP%`, `CrashDumps`, `SoftwareDistribution\Download`.
 - 🟡 `node_modules` (xóa được, `npm install` lại), `.gradle\caches`, `.m2\repository`, `target/` của Rust, `Windows.old` (mất khả năng quay về bản Windows cũ), Steam `shadercache`.
 - 🔵 `Docker\wsl\*.vhdx`, `Packages\*\LocalState\ext4.vhdx` (WSL), `WinSxS`, `hiberfil.sys` (`powercfg /h off`), `pagefile.sys`, `Installer` (`C:\Windows\Installer`), thư mục cài game/app (gỡ qua Settings / launcher).
@@ -93,17 +93,24 @@ Bộ luật khởi đầu (mỗi luật có test):
 - Luật 🔴 luôn thắng luật khác (một path vừa match Safe vừa match Keep → Keep).
 
 ### Xóa an toàn
-- Chỉ xóa item `Safe`/`Caution` có trong phiên quét hiện tại (cùng cơ chế `ScanSession` ở 1.2), kiểm tra lại `PathSafetyValidator` ngay trước khi xóa.
-- **Chuyển vào Thùng rác** (`IFileOperation` với `FOFX_RECYCLEONDELETE` / `SHFileOperationW` + `FOF_ALLOWUNDO`), không xóa vĩnh viễn → người dùng hoàn tác được.
-- Ghi log vào `history.rs` (path, dung lượng, thời điểm).
-- `open_in_explorer(path)` dùng `explorer.exe /select,` (truyền path làm tham số riêng, không ghép chuỗi shell).
+- [x] Chỉ xóa item `Safe`/`Caution` có trong phiên quét hiện tại (cùng cơ chế `ScanSession` ở 1.2), kiểm tra lại `PathSafetyValidator` ngay trước khi xóa.
+- [x] **Chuyển vào Thùng rác** (`IFileOperation` với `FOFX_RECYCLEONDELETE` / `SHFileOperationW` + `FOF_ALLOWUNDO`), không xóa vĩnh viễn → người dùng hoàn tác được.
+- [x] Ghi log vào `history.rs` (path, dung lượng, thời điểm).
+- [x] `open_in_explorer(path)` dùng `explorer.exe /select,` (truyền path làm tham số riêng, không ghép chuỗi shell).
 
 ### Frontend — tab mới "Phân tích ổ đĩa"
-- `src/components/analyzer/DiskAnalyzer.tsx`: nút quét, thanh tiến độ + hủy, chọn ổ/thư mục gốc, ngưỡng dung lượng.
-- Danh sách xếp theo dung lượng, thanh bar tỷ lệ so với ổ đĩa, badge mức an toàn, lọc theo mức.
-- Panel chi tiết: "Đây là gì", "Xóa có sao không", "Cách dọn đúng", app sở hữu, lần sửa cuối.
-- Hộp thoại xác nhận nêu tổng dung lượng + hệ quả với mục 🟡.
-- Thêm vào `ActiveTab`, `Navbar`, `apiBridge.ts`, `types/index.ts`.
+- [x] `src/components/analyzer/DiskAnalyzer.tsx`: nút quét, thanh tiến độ + hủy, chọn ổ/thư mục gốc, ngưỡng dung lượng.
+- [x] Danh sách xếp theo dung lượng, thanh bar tỷ lệ so với ổ đĩa, badge mức an toàn, lọc theo mức.
+- [x] Panel chi tiết: "Đây là gì", "Xóa có sao không", "Cách dọn đúng", app sở hữu, lần sửa cuối.
+- [x] Hộp thoại xác nhận nêu tổng dung lượng + hệ quả với mục 🟡.
+- [x] Thêm vào `ActiveTab`, `Navbar`, `apiBridge.ts`, `types/index.ts`.
+
+> Khác so với kế hoạch (vì an toàn):
+> - `%TEMP%` → 🔵 (dùng tab "Dọn dẹp an toàn", chỉ xóa tệp > 24h) thay vì xóa cả thư mục Temp.
+> - `SoftwareDistribution\Download` và `Windows.old` → 🔵 (Storage Sense / Disk Cleanup): thư mục thuộc TrustedInstaller, chuyển vào Thùng rác thường thất bại hoặc làm hỏng lần cập nhật.
+> - Luật cache ứng dụng (VS Code, Discord, NVIDIA, Teams) neo theo `AppData\...` để không nhận nhầm thư mục dự án trùng tên.
+> - Xóa dùng `SHFileOperationW` + `FOF_ALLOWUNDO | FOF_WANTNUKEWARNING`: mục quá lớn cho Thùng rác thì Windows hỏi lại thay vì xóa vĩnh viễn âm thầm.
+> - Kiểm chứng: logic phân loại/quét/từ chối đã chạy test trên Linux; quét thật & Thùng rác cần kiểm tra tay trên Windows. Tiêu chí "< 60s" chưa đo được trên máy thật.
 
 **DoD:** quét `%USERPROFILE%` trên máy thật < 60s, không treo UI; không có mục 🔴/🔵/⚪ nào có nút xóa; test luật phân loại pass.
 
