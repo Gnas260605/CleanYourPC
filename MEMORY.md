@@ -17,7 +17,7 @@ Tài liệu này lưu trữ toàn bộ các quyết định kiến trúc cốt l
 ---
 
 ### ADR-002: Mô hình bảo mật 2 tiến trình (Dual-Process Privilege Separation)
-- **Trạng thái**: Đã phê duyệt (Accepted).
+- **Trạng thái**: Đã phê duyệt nhưng **CHƯA triển khai** — app hiện chạy 1 tiến trình (xem nợ kỹ thuật bên dưới).
 - **Bối cảnh**: Một số tác vụ dọn dẹp cần quyền Administrator (như dọn `C:\Windows\Temp`, chỉnh sửa `HKLM`, quản lý Windows Services). Nếu chạy cả app dưới quyền Admin thì mỗi lần mở máy/mở app đều hiện UAC, và vi phạm nguyên tắc bảo mật tối thiểu (Least Privilege).
 - **Quyết định**:
   - Tiến trình chính (`winpulse-ui.exe`): Chạy ở **Medium Integrity Level** (quyền người dùng thông thường). Đảm nhiệm render UI, đo đạc metrics CPU/RAM, dọn dẹp thư mục cá nhân người dùng.
@@ -65,3 +65,5 @@ Tài liệu này lưu trữ toàn bộ các quyết định kiến trúc cốt l
 1. **Task Scheduler COM STA Threading**: Khi gọi giao diện COM `ITaskService` từ Rust đa luồng, bắt buộc phải khởi tạo `CoInitializeEx(None, COINIT_APARTMENTTHREADED)` trên một thread riêng biệt để tránh deadlock.
 2. **Quyền truy cập thư mục Temp**: Một số file trong `C:\Windows\Temp` hoặc `%TEMP%` thuộc quyền sở hữu của tiến trình khác (`SYSTEM` hoặc service) có thể gây lỗi `Access Denied` ngay cả khi worker chạy quyền Admin. Cần xử lý bỏ qua nhẹ nhàng kèm ghi log debug.
 3. **Chống phân tán log**: Hạn chế việc ghi log liên tục xuống ổ đĩa SSD khi đang đo lường metrics thời gian thực (chỉ lưu metrics trên RAM buffer vòng tròn - Ring Buffer dung lượng tối đa 5MB).
+4. **Chưa có worker nâng quyền (ADR-002)**: Toàn bộ backend chạy trong 1 tiến trình. Thao tác cần Admin (Windows Services, Restore Point) chỉ thành công khi người dùng tự chạy app bằng quyền Administrator; ngược lại trả `PermissionDenied`. Cần: `winpulse-worker.exe` + Named Pipe có ACL/token, khởi chạy bằng `ShellExecuteEx("runas")` khi cần.
+5. **Quick Boost mâu thuẫn ADR-004**: `tray::perform_quick_boost` gọi `SetProcessWorkingSetSize(-1, -1)` cho mọi tiến trình không cốt lõi — gần với "ép xả RAM" mà ADR-004/REAL_WORLD_ANALYSIS khuyến cáo tránh. Đã sửa UI để hiển thị đúng số ước tính của backend (không còn số bịa), nhưng nên cân nhắc thay bằng EcoQoS cho tiến trình nền hoặc bỏ tính năng.

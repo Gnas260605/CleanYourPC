@@ -6,7 +6,9 @@
 * **Kỹ sư trưởng Thẩm định An toàn & Đóng gói:** Safety-Auditor-QA & Release Engineer
 * **Bộ quy chuẩn kỹ thuật đối chiếu:** [RULE.md](./RULE.md) (*"Zero-Harm System Guarantee"*)
 * **Kiến trúc tham chiếu:** [ARCHITECTURE.md](./ARCHITECTURE.md) & [PLAN.md](./PLAN.md)
-* **Trạng thái phê duyệt:** **ĐẠT CHUẨN XUẤT XƯỞNG (RELEASE CANDIDATE - 100% PRODUCTION READY)**
+* **Trạng thái phê duyệt:** ~~ĐẠT CHUẨN XUẤT XƯỞNG (100% PRODUCTION READY)~~ → **ĐANG NÂNG CẤP (v1.1, xem [UPGRADE_PLAN.md](./UPGRADE_PLAN.md))**
+
+> ⚠️ **Đính chính (28/10/2026):** Báo cáo này được viết trước khi rà soát lại. Đã phát hiện: HTTP server 1421 không xác thực, `clean_files` xóa được đường dẫn bất kỳ ngoài blacklist, tab Services dùng dữ liệu cứng, badge Navbar và kết quả 1-Click Boost là số bịa, kiến trúc 2 tiến trình chưa có. Các lỗi bảo mật đã được sửa ở giai đoạn 1–2 của `UPGRADE_PLAN.md`. Số liệu "39/39 test PASS" bên dưới thuộc phiên bản cũ; nguồn xác nhận hiện tại là CI `windows-latest`.
 
 ---
 

@@ -6,15 +6,18 @@ Tài liệu này tổng kết trạng thái hiện tại của dự án **WinPul
 
 ## 📌 1. Trạng thái hiện tại của dự án (Current Status)
 
-- [x] **Khảo sát & Phân tích hiện trạng**: Phân tích trực tiếp từ dữ liệu thực tế máy tính người dùng (CPU 91%, Disk 87%, tiến trình nền ngốn RAM/Disk như Antigravity IDE, Chrome, các updater).
-- [x] **Xây dựng Tài liệu Kế hoạch (`PLAN.md`)**: Lộ trình 6 giai đoạn phát triển, chia sprint cụ thể và tiêu chí nghiệm thu (DoD).
-- [x] **Thiết kế Kiến trúc Hệ thống (`ARCHITECTURE.md`)**: Lựa chọn Tauri v2 + Rust, mô hình bảo mật 2 tiến trình phân tách quyền hạn (Privilege Separation) qua Named Pipes IPC.
-- [x] **Phân rã Chức năng & Ma trận An toàn (`SPECS.md`)**: Đặc tả 6 module nghiệp vụ (Startup, Process/RAM Guardian, Safe Cleaner, Services, Hardware Monitor, 1-Click Boost).
-- [x] **Đánh giá Thực tế & Rủi ro (`REAL_WORLD_ANALYSIS.md`)**: Phân tích chi tiết tại sao KHÔNG dọn dẹp Registry, không ép xả RAM mù quáng, cách tránh Antivirus False-Positive và tối ưu cho Windows 11.
-- [x] **Thiết lập Bộ quy tắc vàng (`RULE.md`)**: Cam kết "Zero-Harm System Guarantee", danh sách đen cấm chạm, quy chuẩn mã nguồn Rust/Frontend.
-- [x] **Bộ nhớ Quyết định Kiến trúc (`MEMORY.md`)**: Lưu trữ 5 quyết định kiến trúc cốt lõi (ADR-001 đến ADR-005) và danh sách nợ kỹ thuật cần lưu ý.
+> Cập nhật 28/10/2026. Lộ trình nâng cấp đang thực hiện: [`UPGRADE_PLAN.md`](./UPGRADE_PLAN.md) (tick checkbox khi xong từng mục).
 
----
+- [x] Ứng dụng Tauri v2 + React 18 chạy được với 5 tab: Tổng quan, Khởi động, Process Guardian, Dọn dẹp an toàn, Dịch vụ Windows.
+- [x] Backend Rust (`src-tauri/src/`): `metrics`, `startup`, `process_guardian`, `cleaner` + `safety`, `services`, `restore_point`, `config`, `history`, `tray`.
+- [x] CI GitHub Actions `windows-latest` (`.github/workflows/ci.yml`): `npm run build`, `cargo test`, `cargo clippy -D warnings`.
+- [x] Bảo mật: HTTP server cổng 1421 chỉ chạy ở bản debug, chỉ GET; dọn dẹp chỉ theo phiên quét của backend; có CSP.
+- [ ] **Kiến trúc 2 tiến trình (UI + worker nâng quyền qua UAC) CHƯA được triển khai.** App hiện chạy **1 tiến trình**; các thao tác cần quyền Admin (đổi dịch vụ, tạo Restore Point) sẽ báo lỗi rõ ràng khi app không chạy bằng quyền Administrator. Xem nợ kỹ thuật trong [`MEMORY.md`](./MEMORY.md).
+
+### Cách kiểm tra
+- Frontend: `npm ci && npm run build`.
+- Backend (chỉ trên Windows): `cd src-tauri && cargo test && cargo clippy -- -D warnings`.
+- Trên Linux/cloud: `cargo check --target x86_64-pc-windows-msvc` (chỉ type-check, không chạy test). Xem skill `.claude/skills/verify-change`.
 
 ## 🛠️ 2. Yêu cầu môi trường phát triển (Prerequisites)
 
@@ -32,65 +35,9 @@ Tài liệu này tổng kết trạng thái hiện tại của dự án **WinPul
 
 ---
 
-## 🚀 3. Kế hoạch hành động cho phiên tiếp theo (Next Action Steps)
+## 🚀 3. Bước tiếp theo
 
-Lập trình viên / Agent tiếp theo hãy thực hiện tuần tự các bước sau:
-
-### Bước 1: Khởi tạo khung dự án Tauri v2 (Scaffolding)
-Chạy lệnh khởi tạo ứng dụng trong thư mục `d:\Individua_Project\pc-optimizer`:
-```bash
-# Trong thư mục d:\Individua_Project\pc-optimizer
-npx @tauri-apps/cli init
-```
-- Tên ứng dụng: `winpulse-optimizer`
-- Window title: `WinPulse Optimizer`
-- Frontend framework: `Vite + TypeScript + TailwindCSS` (hoặc `Svelte 5 / React`)
-
-### Bước 2: Cấu hình dependencies cho Rust (`Cargo.toml`)
-Thêm các thư viện cốt lõi vào `src-tauri/Cargo.toml`:
-```toml
-[dependencies]
-tauri = { version = "2", features = ["tray-icon"] }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-tokio = { version = "1", features = ["full"] }
-sysinfo = "0.30"
-winreg = "0.52"
-tracing = "0.1"
-tracing-subscriber = "0.3"
-
-[target.'cfg(windows)'.dependencies]
-windows = { version = "0.58", features = [
-    "Win32_Foundation",
-    "Win32_System_Threading",
-    "Win32_System_ProcessStatus",
-    "Win32_System_Services",
-    "Win32_Storage_FileSystem",
-    "Win32_System_Restore",
-    "Win32_UI_Shell",
-    "Win32_System_Registry",
-    "Win32_System_Power"
-] }
-```
-
-### Bước 3: Triển khai Module đo lường phần cứng (`metrics.rs`)
-- Xây dựng background loop với `sysinfo` để lấy:
-  - CPU % tổng thể và từng core.
-  - RAM đang dùng và RAM khả dụng.
-  - Disk read/write throughput (MB/s).
-- Gửi dữ liệu lên UI thông qua Tauri Events (`tauri::Emitter::emit("hardware-metrics", payload)`).
-
-### Bước 4: Triển khai Module Quét tệp rác an toàn (`cleaner.rs`)
-- Quét các thư mục trong WhiteList cấp 🟢 SAFE:
-  - `%TEMP%` (tệp cũ hơn 24 giờ).
-  - `%LOCALAPPDATA%\CrashDumps`.
-- Hỗ trợ hàm `scan_junk()` trả về danh sách tệp và dung lượng dự kiến mà không xóa.
-
-### Bước 5: Thiết kế giao diện Dashboard thời gian thực
-- Dựng UI trang chủ hiển thị:
-  - Đồng hồ đo tốc độ CPU & RAM.
-  - Nút bấm "Quét nhanh 1 chạm" (Quick Scan).
-  - Bảng thống kê dung lượng rác đã tìm thấy.
+Làm tiếp các mục chưa tick trong [`UPGRADE_PLAN.md`](./UPGRADE_PLAN.md) theo đúng thứ tự. Mọi thay đổi chạm tới xóa tệp / kill process / registry / dịch vụ phải chạy checklist `.claude/skills/zero-harm-review`.
 
 ---
 

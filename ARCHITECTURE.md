@@ -26,6 +26,10 @@ Khi xây dựng một phần mềm tiện ích hệ thống (System Utility) tr�
 
 ## 2. Mô hình bảo mật 2 tiến trình (Privilege Separation Architecture)
 
+> ⚠️ **Trạng thái thực tế (28/10/2026): CHƯA triển khai.** Mã nguồn hiện tại chạy **một tiến trình duy nhất** (`winpulse-optimizer.exe`) ở quyền của người dùng mở app. Không có `winpulse-worker.exe` hay Named Pipe. Các thao tác cần Admin (đổi startup type dịch vụ, tạo Restore Point) trả lỗi `PermissionDenied` rõ ràng khi thiếu quyền. Phần dưới đây là **thiết kế mục tiêu**, được theo dõi như nợ kỹ thuật trong `MEMORY.md`.
+>
+> Bổ sung: HTTP server `127.0.0.1:1421` (`http_server.rs`) chỉ tồn tại trong bản **debug** để xem UI bằng trình duyệt; chỉ phục vụ GET read-only và kiểm tra `Host`/`Origin`. Bản release không mở cổng mạng nào.
+
 Một lỗi nghiêm trọng của các phần mềm dọn dẹp cũ là **ép toàn bộ ứng dụng chạy dưới quyền Administrator (High Integrity)**. Điều này dẫn đến:
 1. Mỗi lần mở app đều phải bấm UAC Yes/No phiền phức.
 2. Nếu giao diện hoặc một thư viện bên thứ 3 có lỗ hổng, kẻ tấn công có thể chiếm toàn bộ quyền kiểm soát máy tính.

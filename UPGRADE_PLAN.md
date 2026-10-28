@@ -48,13 +48,16 @@ Sửa:
 
 ## Giai đoạn 2 — Dọn dữ liệu giả & tài liệu sai lệch (P1)
 
-- Navbar badges (`App.tsx`: `startupCount={7}`, `junkEstimateMB={1840}`, `heavyProcessCount={2}`) → lấy số thật (từ startup list, lần scan gần nhất, process list) hoặc ẩn badge khi chưa có dữ liệu.
-- Tab **Services** đang là mảng hardcode `INITIAL_SERVICES`:
+- [x] Navbar badges (`App.tsx`: `startupCount={7}`, `junkEstimateMB={1840}`, `heavyProcessCount={2}`) → lấy số thật (từ startup list, lần scan gần nhất, process list) hoặc ẩn badge khi chưa có dữ liệu.
+- [x] Tab **Services** đang là mảng hardcode `INITIAL_SERVICES`:
   - Thêm `src-tauri/src/services.rs`: đọc trạng thái/startup type thật qua Service Control Manager (`Win32_System_Services`).
   - Đổi startup type chỉ cho danh sách cho phép (DiagTrack, SysMain, RemoteRegistry, ...), chặn `CORE_SYSTEM_SERVICES`, cần quyền admin → nếu không có quyền thì báo rõ, không giả vờ thành công. Backup startup type cũ vào JSON để hoàn tác.
-- Mock metrics (`generateMockMetrics`, nút "High Load Sim") chỉ bật ở `import.meta.env.DEV`; bản release hiển thị trạng thái "Không kết nối được backend".
-- Cập nhật `HANDOFF.md` (đang mô tả bước scaffold đã xong từ lâu) và ghi chú trong `ARCHITECTURE.md`: hiện tại là **1 tiến trình**, mô hình UAC helper 2 tiến trình chưa làm (ghi vào `MEMORY.md` như nợ kỹ thuật).
-- `FINAL_RELEASE_REPORT.md`: bỏ nhãn "100% Production Ready" cho đến khi giai đoạn 1–2 xong.
+- [x] Mock metrics (`generateMockMetrics`, nút "High Load Sim") chỉ bật ở `import.meta.env.DEV`; bản release hiển thị trạng thái "Không kết nối được backend".
+- [x] Cập nhật `HANDOFF.md` (đang mô tả bước scaffold đã xong từ lâu) và ghi chú trong `ARCHITECTURE.md`: hiện tại là **1 tiến trình**, mô hình UAC helper 2 tiến trình chưa làm (ghi vào `MEMORY.md` như nợ kỹ thuật).
+- [x] `FINAL_RELEASE_REPORT.md`: bỏ nhãn "100% Production Ready" cho đến khi giai đoạn 1–2 xong.
+- [x] (Phát sinh) 1-Click Boost và Quét nhanh không còn ghi số liệu bịa vào lịch sử; dùng kết quả thật của `trigger_quick_boost` và các lệnh quét chỉ đọc.
+
+> Ghi chú: dịch vụ chỉ hiển thị/đổi theo danh mục `SERVICE_CATALOG` trong `services.rs`; `SysMain` được xếp "Cần cân nhắc" thay vì "Khuyên tắt". Quick Boost (`SetProcessWorkingSetSize`) mâu thuẫn ADR-004 → ghi vào nợ kỹ thuật `MEMORY.md`, chờ quyết định.
 
 ---
 
