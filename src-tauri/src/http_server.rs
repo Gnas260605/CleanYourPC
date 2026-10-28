@@ -15,6 +15,7 @@ use crate::cleaner::{self, CleanScanResult};
 use crate::history;
 use crate::metrics::MetricsState;
 use crate::process_guardian;
+use crate::services;
 use crate::startup;
 
 /// Origin của Vite dev server được phép gọi
@@ -32,6 +33,7 @@ pub enum Route {
     Startup,
     CleanerScan,
     History,
+    Services,
 }
 
 /// Kết quả phân tích một request
@@ -72,6 +74,7 @@ fn match_route(path: &str) -> Option<Route> {
         "/api/startup" => Some(Route::Startup),
         "/api/cleaner/scan" => Some(Route::CleanerScan),
         "/api/history" => Some(Route::History),
+        "/api/services" => Some(Route::Services),
         _ => None,
     }
 }
@@ -175,6 +178,13 @@ async fn serve_route(route: Route, state: &MetricsState) -> Option<String> {
         Route::History => {
             let h = history::get_history().ok()?;
             serde_json::to_string(&h).ok()
+        }
+        Route::Services => {
+            let list = tauri::async_runtime::spawn_blocking(services::get_services)
+                .await
+                .ok()?
+                .unwrap_or_default();
+            serde_json::to_string(&list).ok()
         }
     }
 }

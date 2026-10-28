@@ -1,5 +1,13 @@
 import { isTauriContext } from "@/hooks/useHardwareMetrics";
-import { ProcessInfo, StartupItem, CleanScanResult, CleanResult } from "@/types";
+import {
+  ProcessInfo,
+  StartupItem,
+  CleanScanResult,
+  CleanResult,
+  ServiceInfo,
+  ServiceChangeResult,
+  OptimizationLog,
+} from "@/types";
 
 // HTTP server chỉ đọc, chỉ chạy khi backend là bản debug (xem src-tauri/src/http_server.rs)
 const LOCAL_HTTP_BASE = "http://127.0.0.1:1421/api";
@@ -109,4 +117,28 @@ export function createRestorePoint(description?: string): Promise<boolean> {
   return mutating<boolean>("create_system_restore_point", {
     description: description || "WinPulse Optimizer Restore Point",
   });
+}
+
+// 5. WINDOWS SERVICES
+export function fetchServices(): Promise<ServiceInfo[]> {
+  return readOnly<ServiceInfo[]>("get_services", "/services", "Không thể đọc danh sách dịch vụ");
+}
+
+/** Đổi startup type ("Manual" | "Disabled" | "Automatic"). Backend tự sao lưu giá trị gốc */
+export function setServiceStartup(
+  name: string,
+  startupType: "Manual" | "Disabled" | "Automatic",
+  stopNow: boolean
+): Promise<ServiceChangeResult> {
+  return mutating<ServiceChangeResult>("set_service_startup", { name, startupType, stopNow });
+}
+
+export function restoreServiceStartup(name: string): Promise<ServiceChangeResult> {
+  return mutating<ServiceChangeResult>("restore_service_startup", { name });
+}
+
+// 6. QUICK BOOST
+/** Thu gọn Working Set các tiến trình không cốt lõi. Backend tự ghi lịch sử và trả về bản ghi thật */
+export function triggerQuickBoost(): Promise<OptimizationLog> {
+  return mutating<OptimizationLog>("trigger_quick_boost");
 }

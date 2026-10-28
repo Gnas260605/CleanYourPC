@@ -28,7 +28,8 @@ export interface NetworkMetrics {
   downloadBytesPerSec: number;
   uploadBytesPerSec: number;
   adapterName: string;
-  pingMs: number;
+  /** Không có số đo thật từ backend → để trống */
+  pingMs?: number;
 }
 
 export interface SystemInfo {
@@ -184,17 +185,29 @@ export interface CleanerFileItem {
   tier: CleanerTier;
 }
 
+// --- Windows Services (src-tauri/src/services.rs) ---
 export type ServiceRecommendation = "safe_to_disable" | "caution" | "keep_default";
+export type ServiceStartupType = "Automatic" | "AutomaticDelayed" | "Manual" | "Disabled" | "Other";
 
-export interface ServiceItem {
+export interface ServiceInfo {
   name: string;
-  displayName: string;
-  status: "running" | "stopped";
-  startupType: "Automatic" | "Manual" | "Disabled";
+  display_name: string;
+  status: "running" | "stopped" | "pending";
+  startup_type: ServiceStartupType;
   recommendation: ServiceRecommendation;
-  vietnameseDescription: string;
-  impactDescription: string;
-  selectedForDisable?: boolean;
+  description_vi: string;
+  impact_vi: string;
+  /** Backend đã tính: có trong allowlist và không phải dịch vụ cốt lõi */
+  can_modify: boolean;
+  /** Startup type gốc nếu WinPulse đã thay đổi (để hoàn tác) */
+  original_startup_type: ServiceStartupType | null;
+}
+
+export interface ServiceChangeResult {
+  name: string;
+  startup_type: ServiceStartupType;
+  status: string;
+  message: string;
 }
 
 export type ActiveTab = "dashboard" | "startup" | "process" | "cleaner" | "services";

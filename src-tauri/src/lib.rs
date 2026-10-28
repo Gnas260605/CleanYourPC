@@ -9,6 +9,7 @@ pub mod process_guardian;
 pub mod restore_point;
 pub mod safety;
 pub mod scan_session;
+pub mod services;
 pub mod startup;
 pub mod tray;
 
@@ -66,6 +67,10 @@ pub fn run() {
             // Disk Cleaner (Sprint 3)
             commands::scan_cleanable_files,
             commands::clean_files,
+            // Windows Services
+            commands::get_services,
+            commands::set_service_startup,
+            commands::restore_service_startup,
             // System Restore Point (Sprint 2)
             commands::create_system_restore_point,
             // App Settings (Sprint 4)

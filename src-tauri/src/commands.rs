@@ -11,6 +11,7 @@ use crate::history::{self, HistorySummary, OptimizationLog};
 use crate::metrics::{HardwareMetrics, MetricsState, SystemInfo};
 use crate::process_guardian::{self, ProcessInfo};
 use crate::restore_point;
+use crate::services::{self, ServiceChangeResult, ServiceInfo};
 use crate::startup::{self, StartupItem};
 use crate::tray;
 
@@ -198,6 +199,45 @@ pub async fn clean_files(
 }
 
 // ==========================================
+// WINDOWS SERVICES
+// ==========================================
+
+/// Ghi lịch sử cho thao tác dịch vụ (không làm hỏng kết quả nếu ghi lỗi)
+fn record_service_history(result: &ServiceChangeResult) {
+    let log = OptimizationLog::new("Windows Services", 0, 1, 0, result.message.clone());
+    if let Err(e) = history::record_log(log) {
+        warn!("Không ghi được lịch sử dịch vụ: {:?}", e);
+    }
+}
+
+/// Tauri Command: Đọc trạng thái thật các dịch vụ trong danh mục hỗ trợ
+#[tauri::command]
+pub async fn get_services() -> Result<Vec<ServiceInfo>, AppError> {
+    run_blocking(services::get_services).await
+}
+
+/// Tauri Command: Đổi startup type dịch vụ được phép (sao lưu giá trị gốc trước)
+#[tauri::command]
+pub async fn set_service_startup(
+    name: String,
+    startup_type: String,
+    stop_now: bool,
+) -> Result<ServiceChangeResult, AppError> {
+    let result =
+        run_blocking(move || services::set_service_startup(&name, &startup_type, stop_now)).await?;
+    record_service_history(&result);
+    Ok(result)
+}
+
+/// Tauri Command: Hoàn tác dịch vụ về startup type gốc đã sao lưu
+#[tauri::command]
+pub async fn restore_service_startup(name: String) -> Result<ServiceChangeResult, AppError> {
+    let result = run_blocking(move || services::restore_service_startup(&name)).await?;
+    record_service_history(&result);
+    Ok(result)
+}
+
+// ==========================================
 // RESTORE POINT COMMANDS (Sprint 2)
 // ==========================================
 
@@ -252,7 +292,7 @@ pub async fn clear_history() -> Result<bool, AppError> {
 /// Tauri Command: Kích hoạt tác vụ tối ưu nhanh (Quick Boost)
 #[tauri::command]
 pub async fn trigger_quick_boost(app: AppHandle) -> Result<OptimizationLog, AppError> {
-    tray::perform_quick_boost(&app)
+    run_blocking(move || tray::perform_quick_boost(&app)).await
 }
 
 // ==========================================
