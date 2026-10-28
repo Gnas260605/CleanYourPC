@@ -136,7 +136,7 @@ impl MetricsCollector {
         // Tính tổng Network upload/download speeds
         let mut total_net_rx: u64 = 0;
         let mut total_net_tx: u64 = 0;
-        for (_interface_name, data) in self.networks.iter() {
+        for data in self.networks.values() {
             total_net_rx = total_net_rx.saturating_add(data.received());
             total_net_tx = total_net_tx.saturating_add(data.transmitted());
         }
@@ -276,6 +276,18 @@ impl MetricsCollector {
 #[derive(Clone)]
 pub struct MetricsState {
     collector: Arc<Mutex<MetricsCollector>>,
+}
+
+impl Default for MetricsCollector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Default for MetricsState {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MetricsState {

@@ -129,7 +129,7 @@ pub fn get_process_list() -> AppResult<Vec<ProcessInfo>> {
     }
 
     // Sắp xếp giảm dần theo mức chiếm dụng RAM để dễ phân tích
-    list.sort_by(|a, b| b.memory_bytes.cmp(&a.memory_bytes));
+    list.sort_by_key(|p| std::cmp::Reverse(p.memory_bytes));
 
     Ok(list)
 }

@@ -98,9 +98,7 @@ fn read_registry_startup(root: HKEY, location: &str) -> Vec<StartupItem> {
         .ok();
 
     for (name, val) in run_key.enum_values().flatten() {
-        let command = match val.to_string() {
-            s => s,
-        };
+        let command = val.to_string();
 
         let enabled = is_approved_enabled(&approved_key, &name);
         let impact = estimate_impact(&name, &command);
@@ -142,28 +140,26 @@ fn read_folder_startup() -> Vec<StartupItem> {
         Err(_) => return items,
     };
 
-    for entry_res in entries {
-        if let Ok(entry) = entry_res {
-            let path = entry.path();
-            if path.is_file() {
-                let file_name = entry.file_name().to_string_lossy().to_string();
-                if file_name.eq_ignore_ascii_case("desktop.ini") {
-                    continue;
-                }
-
-                let command = path.to_string_lossy().to_string();
-                let enabled = is_approved_enabled(&approved_folder_key, &file_name);
-                let impact = estimate_impact(&file_name, &command);
-
-                items.push(StartupItem {
-                    id: format!("StartupFolder:{}", file_name),
-                    name: file_name,
-                    command,
-                    location: "StartupFolder".to_string(),
-                    enabled,
-                    impact,
-                });
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_file() {
+            let file_name = entry.file_name().to_string_lossy().to_string();
+            if file_name.eq_ignore_ascii_case("desktop.ini") {
+                continue;
             }
+
+            let command = path.to_string_lossy().to_string();
+            let enabled = is_approved_enabled(&approved_folder_key, &file_name);
+            let impact = estimate_impact(&file_name, &command);
+
+            items.push(StartupItem {
+                id: format!("StartupFolder:{}", file_name),
+                name: file_name,
+                command,
+                location: "StartupFolder".to_string(),
+                enabled,
+                impact,
+            });
         }
     }
 
