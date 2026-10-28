@@ -54,7 +54,7 @@ export const SystemSpecsCard: React.FC<SystemSpecsCardProps> = ({
               {cpu.model}
             </p>
             <p className="text-[11px] font-mono text-cyan-400 mt-1">
-              {cpu.cores} Cores • {cpu.threads} Threads @ {cpu.frequencyGhz} GHz
+              {cpu.threads} luồng logic @ {cpu.frequencyGhz} GHz
             </p>
           </div>
         </div>

@@ -23,10 +23,17 @@ import {
 
 interface ProcessGuardianProps {
   onNotify: (msg: string) => void;
+  /** Báo danh sách thật cho badge Navbar */
+  onProcessesChange?: (list: ProcessInfo[]) => void;
 }
 
-export const ProcessGuardian: React.FC<ProcessGuardianProps> = ({ onNotify }) => {
+export const ProcessGuardian: React.FC<ProcessGuardianProps> = ({ onNotify, onProcessesChange }) => {
   const [processes, setProcesses] = useState<ProcessInfo[]>([]);
+  const [hasLoaded, setHasLoaded] = useState(false);
+
+  useEffect(() => {
+    if (hasLoaded) onProcessesChange?.(processes);
+  }, [processes, hasLoaded, onProcessesChange]);
   const [searchQuery, setSearchQuery] = useState("");
   const [safetyFilter, setSafetyFilter] = useState<"all" | "safe" | "critical" | "eco">("all");
   const [sortBy, setSortBy] = useState<"memory" | "cpu">("memory");
@@ -41,6 +48,7 @@ export const ProcessGuardian: React.FC<ProcessGuardianProps> = ({ onNotify }) =>
       const realList = await fetchProcessList();
       if (Array.isArray(realList) && realList.length > 0) {
         setProcesses(realList);
+        setHasLoaded(true);
         if (isManual) {
           onNotify(`Đã cập nhật ${realList.length} tiến trình thực tế từ Windows API.`);
         }

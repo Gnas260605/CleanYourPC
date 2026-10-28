@@ -15,10 +15,17 @@ import { fetchStartupList, toggleStartupItem, backupStartup } from "@/services/a
 
 interface StartupManagerProps {
   onNotify: (msg: string) => void;
+  /** Báo danh sách thật cho badge Navbar */
+  onItemsChange?: (items: StartupItem[]) => void;
 }
 
-export const StartupManager: React.FC<StartupManagerProps> = ({ onNotify }) => {
+export const StartupManager: React.FC<StartupManagerProps> = ({ onNotify, onItemsChange }) => {
   const [items, setItems] = useState<StartupItem[]>([]);
+  const [hasLoaded, setHasLoaded] = useState(false);
+
+  useEffect(() => {
+    if (hasLoaded) onItemsChange?.(items);
+  }, [items, hasLoaded, onItemsChange]);
   const [searchQuery, setSearchQuery] = useState("");
   const [impactFilter, setImpactFilter] = useState<string>("all");
   const [isLoading, setIsLoading] = useState(false);
@@ -34,11 +41,11 @@ export const StartupManager: React.FC<StartupManagerProps> = ({ onNotify }) => {
         const normalized = realItems.map((item) => ({
           ...item,
           location: item.location || "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
-          publisher: item.publisher || "System / Verified App",
           source: item.source || (item.location?.includes("HKLM") ? "HKLM" : "HKCU"),
           startupDelaySec: item.startupDelaySec ?? (item.impact === "High" ? 2.5 : item.impact === "Medium" ? 1.2 : 0.3),
         }));
         setItems(normalized);
+        setHasLoaded(true);
         if (isManualRefresh) {
           onNotify(`Đã nạp ${normalized.length} ứng dụng khởi động từ Windows Registry.`);
         }

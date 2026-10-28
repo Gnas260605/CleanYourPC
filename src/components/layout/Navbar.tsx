@@ -7,12 +7,14 @@ import {
   SlidersHorizontal 
 } from "lucide-react";
 import { ActiveTab } from "@/types";
+import { formatBytes } from "@/utils/formatters";
 
 interface NavbarProps {
   activeTab: ActiveTab;
   onSelectTab: (tab: ActiveTab) => void;
+  /** Số liệu thật; undefined = chưa có dữ liệu → ẩn badge */
   startupCount?: number;
-  junkEstimateMB?: number;
+  junkBytes?: number;
   heavyProcessCount?: number;
 }
 
@@ -27,9 +29,9 @@ interface NavItem {
 export const Navbar: React.FC<NavbarProps> = ({
   activeTab,
   onSelectTab,
-  startupCount = 7,
-  junkEstimateMB = 1840,
-  heavyProcessCount = 2,
+  startupCount,
+  junkBytes,
+  heavyProcessCount,
 }) => {
   const navItems: NavItem[] = [
     {
@@ -48,14 +50,14 @@ export const Navbar: React.FC<NavbarProps> = ({
       id: "process",
       label: "Process Guardian",
       icon: ShieldAlert,
-      badge: heavyProcessCount > 0 ? `${heavyProcessCount} ngốn RAM` : undefined,
+      badge: heavyProcessCount ? `${heavyProcessCount} ngốn RAM` : undefined,
       badgeColor: "bg-amber-500/20 text-amber-300 border-amber-500/30",
     },
     {
       id: "cleaner",
       label: "Dọn dẹp an toàn",
       icon: Trash2,
-      badge: `${(junkEstimateMB / 1024).toFixed(1)} GB`,
+      badge: junkBytes ? formatBytes(junkBytes) : undefined,
       badgeColor: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
     },
     {

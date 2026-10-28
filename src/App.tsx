@@ -10,6 +10,7 @@ import { ServicesOptimizer } from "./components/services/ServicesOptimizer";
 import { SettingsModal } from "./components/settings/SettingsModal";
 import { HistoryModal } from "./components/history/HistoryModal";
 import { useHardwareMetrics, isTauriContext } from "./hooks/useHardwareMetrics";
+import { useNavBadges } from "./hooks/useNavBadges";
 import { ActiveTab, AppSettings } from "./types";
 import { CheckCircle2, X } from "lucide-react";
 
@@ -58,10 +59,13 @@ export function App() {
 
   const {
     metrics,
-    isLiveTauri,
+    status: metricsStatus,
     isHighLoadSim,
     toggleHighLoadSimulation,
+    retry: retryMetrics,
   } = useHardwareMetrics(settings.poll_interval_ms);
+
+  const badges = useNavBadges();
 
   const showNotification = (msg: string) => {
     setToastMessage(msg);
@@ -78,7 +82,7 @@ export function App() {
       {/* 2. Application Action Header */}
       <Header
         uptimeSeconds={metrics.system.uptimeSeconds}
-        isLiveTauri={isLiveTauri}
+        status={metricsStatus}
         isHighLoadSim={isHighLoadSim}
         onToggleHighLoad={toggleHighLoadSimulation}
         onNotify={showNotification}
@@ -90,13 +94,28 @@ export function App() {
       <Navbar
         activeTab={activeTab}
         onSelectTab={setActiveTab}
-        startupCount={7}
-        junkEstimateMB={1840}
-        heavyProcessCount={2}
+        startupCount={badges.startupCount}
+        junkBytes={badges.junkBytes}
+        heavyProcessCount={badges.heavyProcessCount}
       />
 
       {/* 4. Main Content Area */}
       <main className="flex-1 min-h-0 w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 overflow-y-auto">
+        {activeTab === "dashboard" && metricsStatus === "offline" && (
+          <div className="mb-6 p-4 rounded-2xl border border-rose-500/30 bg-rose-500/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-rose-200">
+            <span>
+              Không kết nối được backend đo phần cứng. Số liệu bên dưới chưa phải dữ liệu thật — hãy chạy WinPulse bằng
+              ứng dụng desktop.
+            </span>
+            <button
+              onClick={retryMetrics}
+              className="px-3 py-1.5 rounded-lg bg-surface-850 text-slate-100 border border-white/[0.08] hover:bg-surface-800 shrink-0"
+            >
+              Thử lại
+            </button>
+          </div>
+        )}
+
         {activeTab === "dashboard" && (
           <DashboardPage
             metrics={metrics}
@@ -106,15 +125,15 @@ export function App() {
         )}
 
         {activeTab === "startup" && (
-          <StartupManager onNotify={showNotification} />
+          <StartupManager onNotify={showNotification} onItemsChange={badges.onStartupItemsChange} />
         )}
 
         {activeTab === "process" && (
-          <ProcessGuardian onNotify={showNotification} />
+          <ProcessGuardian onNotify={showNotification} onProcessesChange={badges.onProcessesChange} />
         )}
 
         {activeTab === "cleaner" && (
-          <SafeCleaner onNotify={showNotification} />
+          <SafeCleaner onNotify={showNotification} onScanComplete={badges.onJunkScanned} />
         )}
 
         {activeTab === "services" && (

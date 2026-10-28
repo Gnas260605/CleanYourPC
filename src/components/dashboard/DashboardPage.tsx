@@ -14,10 +14,9 @@ import { ThroughputCard } from "./ThroughputCard";
 import { SystemSpecsCard } from "./SystemSpecsCard";
 import { QuickScanModal } from "./QuickScanModal";
 import { formatBytes } from "@/utils/formatters";
-import { HardwareMetrics } from "@/types";
+import { HardwareMetrics, OptimizationLog } from "@/types";
 import { AnimatedCounter } from "@/components/common/AnimatedCounter";
-import { logOptimizationSession } from "@/utils/historyLogger";
-import { isTauriContext } from "@/hooks/useHardwareMetrics";
+import { triggerQuickBoost } from "@/services/apiBridge";
 
 interface DashboardPageProps {
   metrics: HardwareMetrics;
@@ -34,11 +33,15 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
 }) => {
   const [isScanModalOpen, setIsScanModalOpen] = useState(false);
   const [isDirectBoosting, setIsDirectBoosting] = useState(false);
-  const [boostCelebration, setBoostCelebration] = useState<{
-    freedRamMB: number;
-    freedJunkMB: number;
-    processesTuned: number;
-  } | null>(null);
+  const [boostCelebration, setBoostCelebration] = useState<OptimizationLog | null>(null);
+
+  const showBoostResult = (log: OptimizationLog) => {
+    setBoostCelebration(log);
+    onBoostNotification(
+      `⚡ Quick Boost: thu gọn ${log.items_cleaned} tiến trình, ước tính ~${formatBytes(log.freed_bytes)} RAM.`
+    );
+    setTimeout(() => setBoostCelebration(null), 7000);
+  };
 
   // Compute health score based on CPU & RAM usage
   const healthScore = Math.max(
@@ -46,46 +49,16 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
     Math.round(100 - (metrics.cpu.usage * 0.25 + metrics.ram.usagePercent * 0.25))
   );
 
-  // Direct 1-Click Boost handler (with laser sweep & animated numbers)
+  // 1-Click Boost: gọi backend thật, hiển thị đúng kết quả backend trả về (backend tự ghi lịch sử)
   const handleInstantBoost = async () => {
     setIsDirectBoosting(true);
-
-    if (isTauriContext()) {
-      try {
-        const { invoke } = await import("@tauri-apps/api/core");
-        // Gọi trigger_quick_boost của backend nếu có
-        await invoke("trigger_quick_boost").catch((e) => {
-          console.warn("trigger_quick_boost invoke fallback:", e);
-        });
-      } catch (err) {
-        console.warn("Tauri quick boost:", err);
-      }
-    }
-
-    // Ghi nhận bản ghi tối ưu vào lịch sử
-    const freedRam = 820 * 1024 * 1024;
-    const freedJunk = 1840 * 1024 * 1024;
-    await logOptimizationSession(
-      "1-Click Boost",
-      freedRam + freedJunk,
-      21,
-      2,
-      "Tối ưu 1-Click Boost: Thu hồi RAM Working Set & Dọn cache tạm"
-    );
-
-    setTimeout(() => {
+    try {
+      showBoostResult(await triggerQuickBoost());
+    } catch (err: unknown) {
+      onBoostNotification(`Không thể chạy Quick Boost: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
       setIsDirectBoosting(false);
-      setBoostCelebration({
-        freedRamMB: 820,
-        freedJunkMB: 1840,
-        processesTuned: 3,
-      });
-      onBoostNotification("⚡ 1-Click Boost hoàn tất: Đã giải phóng 820 MB RAM và dọn sạch 1.84 GB tệp rác!");
-
-      setTimeout(() => {
-        setBoostCelebration(null);
-      }, 7000);
-    }, 1500);
+    }
   };
 
   return (
@@ -124,7 +97,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             </h1>
 
             <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-              Tất cả các dịch vụ hệ thống và luồng tiến trình đều được giám sát liên tục. Nhấn nút quét nhanh để dọn dẹp bộ nhớ đệm và giải phóng các tệp tạm thời.
+              Tất cả các dịch vụ hệ thống và luồng tiến trình đều được giám sát liên tục. Nhấn quét nhanh để kiểm tra tệp rác, tiến trình nặng và dịch vụ không cần thiết.
             </p>
           </div>
 
@@ -153,7 +126,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               <div className="absolute inset-0 bg-white/20 -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-in-out" />
 
               <Sparkles className={`w-4 h-4 text-cyan-200 ${isDirectBoosting ? "animate-spin" : "animate-pulse"}`} />
-              <span>{isDirectBoosting ? "Đang Tối Ưu Tia Quét..." : "1-Click Boost Ngay"}</span>
+              <span>{isDirectBoosting ? "Đang tối ưu..." : "1-Click Boost Ngay"}</span>
               <Zap className="w-4 h-4 text-yellow-300" />
             </button>
 
@@ -179,13 +152,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               </div>
               <div>
                 <h3 className="font-display font-bold text-base text-white flex items-center gap-2">
-                  <span>Hệ Thống Đã Được Tăng Tốc Toàn Diện!</span>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                    60 FPS Optimal
-                  </span>
+                  <span>Quick Boost hoàn tất</span>
                 </h3>
                 <p className="text-xs text-slate-300 mt-0.5">
-                  Bộ nhớ RAM đã được nén và hoàn trả cho các ứng dụng nặng. Tệp rác cache an toàn đã dọn sạch.
+                  Windows đã thu gọn Working Set của các tiến trình không cốt lõi. Dung lượng RAM là số ước tính.
                 </p>
               </div>
             </div>
@@ -193,23 +163,23 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             {/* Jumping Animated Counters */}
             <div className="flex items-center gap-4 flex-wrap">
               <div className="px-3.5 py-2 rounded-xl bg-surface-950/70 border border-emerald-500/30 text-center">
-                <div className="text-[10px] text-slate-400 font-medium">RAM Thu Hồi</div>
+                <div className="text-[10px] text-slate-300 font-medium">RAM ước tính</div>
                 <div className="font-display font-bold text-base text-emerald-400 font-mono">
-                  +<AnimatedCounter end={boostCelebration.freedRamMB} suffix=" MB" />
-                </div>
-              </div>
-
-              <div className="px-3.5 py-2 rounded-xl bg-surface-950/70 border border-cyan-500/30 text-center">
-                <div className="text-[10px] text-slate-400 font-medium">Tệp Rác Dọn Dẹp</div>
-                <div className="font-display font-bold text-base text-cyan-400 font-mono">
-                  +<AnimatedCounter end={boostCelebration.freedJunkMB} suffix=" MB" />
+                  ~<AnimatedCounter end={Math.round(boostCelebration.freed_bytes / (1024 * 1024))} suffix=" MB" />
                 </div>
               </div>
 
               <div className="px-3.5 py-2 rounded-xl bg-surface-950/70 border border-violet-500/30 text-center">
-                <div className="text-[10px] text-slate-400 font-medium">Tiến Trình Tối Ưu</div>
+                <div className="text-[10px] text-slate-300 font-medium">Tiến trình đã thu gọn</div>
                 <div className="font-display font-bold text-base text-violet-400 font-mono">
-                  <AnimatedCounter end={boostCelebration.processesTuned} suffix=" luồng" />
+                  <AnimatedCounter end={boostCelebration.items_cleaned} />
+                </div>
+              </div>
+
+              <div className="px-3.5 py-2 rounded-xl bg-surface-950/70 border border-white/[0.08] text-center">
+                <div className="text-[10px] text-slate-300 font-medium">Bỏ qua</div>
+                <div className="font-display font-bold text-base text-slate-200 font-mono">
+                  <AnimatedCounter end={boostCelebration.items_skipped_locked} />
                 </div>
               </div>
             </div>
@@ -250,9 +220,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
       <QuickScanModal
         isOpen={isScanModalOpen}
         onClose={() => setIsScanModalOpen(false)}
-        onApplyBoost={() => {
-          onBoostNotification("Đã giải phóng 750 MB RAM và dọn sạch 1.84 GB tệp rác!");
-        }}
+        metrics={metrics}
+        onBoostApplied={showBoostResult}
       />
     </div>
   );

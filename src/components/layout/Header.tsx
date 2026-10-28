@@ -10,11 +10,19 @@ import {
   History
 } from "lucide-react";
 import { formatUptime } from "@/utils/formatters";
-import { isTauriContext } from "@/hooks/useHardwareMetrics";
+import { MetricsStatus, MOCK_METRICS_ENABLED } from "@/hooks/useHardwareMetrics";
+import { createRestorePoint } from "@/services/apiBridge";
+
+const STATUS_PILL: Record<MetricsStatus, { label: string; className: string }> = {
+  live: { label: "Đã kết nối backend", className: "text-cyan-400 animate-pulse" },
+  connecting: { label: "Đang kết nối...", className: "text-slate-300" },
+  mock: { label: "Dữ liệu giả lập (dev)", className: "text-amber-400" },
+  offline: { label: "Mất kết nối backend", className: "text-rose-400" },
+};
 
 interface HeaderProps {
   uptimeSeconds: number;
-  isLiveTauri: boolean;
+  status: MetricsStatus;
   isHighLoadSim: boolean;
   onToggleHighLoad: () => void;
   onNotify?: (msg: string) => void;
@@ -24,7 +32,7 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({
   uptimeSeconds,
-  isLiveTauri,
+  status,
   isHighLoadSim,
   onToggleHighLoad,
   onNotify,
@@ -35,33 +43,22 @@ export const Header: React.FC<HeaderProps> = ({
 
   const handleCreateRestorePoint = async () => {
     setIsCreatingRestorePoint(true);
-    if (isTauriContext()) {
-      try {
-        const { invoke } = await import("@tauri-apps/api/core");
-        const success = await invoke<boolean>("create_system_restore_point", {
-          description: "WinPulse Optimizer Manual Restore Point",
-        });
-        setIsCreatingRestorePoint(false);
-        if (success) {
-          onNotify?.("🛡️ Đã tạo Điểm khôi phục hệ thống (Restore Point) thành công!");
-        } else {
-          onNotify?.("Không thể tạo Điểm khôi phục: Yêu cầu quyền Administrator hoặc System Protection chưa bật.");
-        }
-        return;
-      } catch (err: unknown) {
-        const errorMsg = err instanceof Error ? err.message : String(err);
-        setIsCreatingRestorePoint(false);
-        onNotify?.(`Lỗi tạo Restore Point: ${errorMsg}`);
-        return;
+    try {
+      const success = await createRestorePoint("WinPulse Optimizer Manual Restore Point");
+      if (success) {
+        onNotify?.("🛡️ Đã tạo Điểm khôi phục hệ thống (Restore Point) thành công!");
+      } else {
+        onNotify?.("Không thể tạo Điểm khôi phục: Yêu cầu quyền Administrator hoặc System Protection chưa bật.");
       }
-    }
-
-    // Web Fallback simulation
-    setTimeout(() => {
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      onNotify?.(`Lỗi tạo Restore Point: ${errorMsg}`);
+    } finally {
       setIsCreatingRestorePoint(false);
-      onNotify?.("🛡️ [Mô phỏng] Đã tạo Điểm khôi phục hệ thống (Restore Point) thành công!");
-    }, 1200);
+    }
   };
+
+  const statusPill = STATUS_PILL[status];
 
   return (
     <header className="h-13 shrink-0 border-b border-white/[0.06] bg-surface-950/70 backdrop-blur-xl px-4 sm:px-6 flex items-center justify-between select-none z-40 transition-colors">
@@ -108,11 +105,12 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="flex items-center gap-2">
         {/* Engine Mode Pill */}
         <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-surface-850/70 border border-white/[0.05] text-[11px] font-mono text-slate-400">
-          <Radio className={`w-3 h-3 ${isLiveTauri ? "text-cyan-400 animate-pulse" : "text-amber-400"}`} />
-          <span>{isLiveTauri ? "Tauri IPC Native" : "Web Dev Mock"}</span>
+          <Radio className={`w-3 h-3 ${statusPill.className}`} aria-hidden="true" />
+          <span>{statusPill.label}</span>
         </div>
 
-        {/* Dev Tool: Toggle High Load Simulator */}
+        {/* Dev Tool: Toggle High Load Simulator (chỉ có khi npm run dev) */}
+        {MOCK_METRICS_ENABLED && (
         <button
           onClick={onToggleHighLoad}
           title="Mô phỏng trạng thái CPU/RAM quá tải để kiểm thử giao diện cảnh báo"
@@ -125,6 +123,7 @@ export const Header: React.FC<HeaderProps> = ({
           <Flame className="w-3 h-3 text-rose-400" />
           <span className="hidden sm:inline">{isHighLoadSim ? "High Load ON" : "Stress Sim"}</span>
         </button>
+        )}
 
         {/* Vertical divider */}
         <div className="h-4 w-[1px] bg-white/[0.1] mx-1" />

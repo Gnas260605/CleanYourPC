@@ -19,9 +19,11 @@ import { scanCleanableFiles, cleanFiles, createRestorePoint } from "@/services/a
 
 interface SafeCleanerProps {
   onNotify: (msg: string) => void;
+  /** Báo tổng dung lượng của lần quét gần nhất cho badge Navbar */
+  onScanComplete?: (totalBytes: number) => void;
 }
 
-export const SafeCleaner: React.FC<SafeCleanerProps> = ({ onNotify }) => {
+export const SafeCleaner: React.FC<SafeCleanerProps> = ({ onNotify, onScanComplete }) => {
   const [selectedCategory, setSelectedCategory] = useState<CleanerCategory | "All">("Safe");
   const [files, setFiles] = useState<CleanableItem[]>([]);
   const [scanId, setScanId] = useState<string>("");
@@ -77,6 +79,7 @@ export const SafeCleaner: React.FC<SafeCleanerProps> = ({ onNotify }) => {
     try {
       const { scan_id, items: scanned } = await scanCleanableFiles();
       setScanId(scan_id);
+      onScanComplete?.(scanned.reduce((acc, f) => acc + f.size_bytes, 0));
       setHasScanned(true);
       setFiles(
         scanned.map((item) => ({
