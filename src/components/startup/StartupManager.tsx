@@ -8,10 +8,15 @@ import {
   AlertTriangle, 
   FileCheck,
   RotateCw,
-  Loader2
+  Loader2,
+  AlertCircle
 } from "lucide-react";
 import { StartupItem } from "@/types";
 import { fetchStartupList, toggleStartupItem, backupStartup } from "@/services/apiBridge";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
+
+type StartupSort = "impact" | "name" | "enabled";
+const IMPACT_RANK: Record<string, number> = { High: 0, Medium: 1, Low: 2 };
 
 interface StartupManagerProps {
   onNotify: (msg: string) => void;
@@ -31,30 +36,31 @@ export const StartupManager: React.FC<StartupManagerProps> = ({ onNotify, onItem
   const [isLoading, setIsLoading] = useState(false);
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [backupSuccess, setBackupSuccess] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<StartupSort>("impact");
+  const [pendingDisable, setPendingDisable] = useState<StartupItem | null>(null);
+  const [isToggling, setIsToggling] = useState(false);
 
   // Fetch real startup items from Windows Registry
   const loadStartupItems = async (isManualRefresh = false) => {
     setIsLoading(true);
     try {
       const realItems = await fetchStartupList();
-      if (Array.isArray(realItems) && realItems.length > 0) {
-        const normalized = realItems.map((item) => ({
-          ...item,
-          location: item.location || "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
-          source: item.source || (item.location?.includes("HKLM") ? "HKLM" : "HKCU"),
-          startupDelaySec: item.startupDelaySec ?? (item.impact === "High" ? 2.5 : item.impact === "Medium" ? 1.2 : 0.3),
-        }));
-        setItems(normalized);
-        setHasLoaded(true);
-        if (isManualRefresh) {
-          onNotify(`Đã nạp ${normalized.length} ứng dụng khởi động từ Windows Registry.`);
-        }
+      const normalized = realItems.map((item) => ({
+        ...item,
+        location: item.location || "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+        source: item.source || (item.location?.includes("HKLM") ? "HKLM" : "HKCU"),
+        // Ước tính thô theo mức tác động (Windows không cung cấp số đo chính xác cho từng mục)
+        startupDelaySec: item.startupDelaySec ?? (item.impact === "High" ? 2.5 : item.impact === "Medium" ? 1.2 : 0.3),
+      }));
+      setItems(normalized);
+      setHasLoaded(true);
+      setLoadError(null);
+      if (isManualRefresh) {
+        onNotify(`Đã nạp ${normalized.length} ứng dụng khởi động từ Windows Registry.`);
       }
     } catch (err) {
-      console.warn("Không thể tải startup items:", err);
-      if (isManualRefresh) {
-        onNotify("Không thể kết nối đến Native Registry Service.");
-      }
+      setLoadError(err instanceof Error ? err.message : String(err));
     } finally {
       setIsLoading(false);
     }
@@ -64,12 +70,19 @@ export const StartupManager: React.FC<StartupManagerProps> = ({ onNotify, onItem
     loadStartupItems();
   }, []);
 
+  // Tắt cần xác nhận; bật lại thì thực hiện ngay (thao tác khôi phục)
+  const requestToggle = (item: StartupItem) => {
+    if (item.enabled) setPendingDisable(item);
+    else handleToggle(item.id);
+  };
+
   // Toggle item enabled state via Windows StartupApproved Registry flag
   const handleToggle = async (id: string) => {
     const target = items.find((i) => i.id === id);
     if (!target) return;
     const nextState = !target.enabled;
 
+    setIsToggling(true);
     try {
       const success = await toggleStartupItem(
         target.id,
@@ -90,6 +103,9 @@ export const StartupManager: React.FC<StartupManagerProps> = ({ onNotify, onItem
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       onNotify(`Lỗi khi đổi trạng thái ${target.name}: ${errorMsg}`);
+    } finally {
+      setIsToggling(false);
+      setPendingDisable(null);
     }
   };
 
@@ -117,6 +133,10 @@ export const StartupManager: React.FC<StartupManagerProps> = ({ onNotify, onItem
       item.command.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesImpact = impactFilter === "all" || item.impact === impactFilter;
     return matchesSearch && matchesImpact;
+  }).sort((a, b) => {
+    if (sortBy === "name") return a.name.localeCompare(b.name);
+    if (sortBy === "enabled") return Number(b.enabled) - Number(a.enabled) || a.name.localeCompare(b.name);
+    return (IMPACT_RANK[a.impact] ?? 3) - (IMPACT_RANK[b.impact] ?? 3) || a.name.localeCompare(b.name);
   });
 
   const enabledCount = items.filter((i) => i.enabled).length;
@@ -140,7 +160,7 @@ export const StartupManager: React.FC<StartupManagerProps> = ({ onNotify, onItem
               </h2>
             </div>
             <p className="text-xs text-slate-300 max-w-2xl">
-              Tắt các ứng dụng không cần thiết giúp Windows khởi động nhanh hơn 30-50%. Tuân thủ quy tắc RULE.md: Tự động ghi log sao lưu trước mọi thay đổi.
+              Tắt các ứng dụng không cần thiết để Windows khởi động nhanh hơn. Lệnh gốc trong Registry được giữ nguyên; có thể sao lưu và bật lại bất cứ lúc nào.
             </p>
           </div>
 
@@ -150,6 +170,7 @@ export const StartupManager: React.FC<StartupManagerProps> = ({ onNotify, onItem
               onClick={() => loadStartupItems(true)}
               disabled={isLoading}
               title="Làm mới danh sách ứng dụng khởi động"
+              aria-label="Làm mới danh sách ứng dụng khởi động"
               className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-medium bg-surface-850 hover:bg-surface-800 text-slate-300 hover:text-white border border-white/[0.08] transition-all disabled:opacity-50"
             >
               <RotateCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin text-cyan-400" : ""}`} />
@@ -217,7 +238,7 @@ export const StartupManager: React.FC<StartupManagerProps> = ({ onNotify, onItem
               <Clock className="w-4 h-4" />
             </div>
             <div>
-              <div className="text-xs text-slate-400">Thời gian boot đã tiết kiệm</div>
+              <div className="text-xs text-slate-400">Boot nhanh hơn (ước tính)</div>
               <div className="font-mono text-base font-bold text-emerald-400">
                 ~{estimatedDelaySaved.toFixed(1)} giây
               </div>
@@ -227,7 +248,7 @@ export const StartupManager: React.FC<StartupManagerProps> = ({ onNotify, onItem
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3">
         <div className="relative w-full sm:w-80">
           <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
@@ -235,11 +256,12 @@ export const StartupManager: React.FC<StartupManagerProps> = ({ onNotify, onItem
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Tìm tên ứng dụng, đường dẫn lệnh..."
+            aria-label="Tìm ứng dụng khởi động"
             className="w-full pl-10 pr-4 py-2 rounded-xl bg-surface-900/80 border border-white/[0.08] text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50"
           />
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto">
+        <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
           <span className="text-xs text-slate-400 flex items-center gap-1 shrink-0">
             <Filter className="w-3.5 h-3.5" /> Lọc tác động:
           </span>
@@ -247,7 +269,8 @@ export const StartupManager: React.FC<StartupManagerProps> = ({ onNotify, onItem
             <button
               key={impact}
               onClick={() => setImpactFilter(impact)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              aria-pressed={impactFilter === impact}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap shrink-0 transition-all ${
                 impactFilter === impact
                   ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 shadow-sm"
                   : "bg-surface-900/60 text-slate-400 hover:text-slate-200 border border-white/[0.04]"
@@ -256,15 +279,38 @@ export const StartupManager: React.FC<StartupManagerProps> = ({ onNotify, onItem
               {impact === "all" ? "Tất cả" : impact}
             </button>
           ))}
+          <label className="flex items-center gap-1.5 text-xs text-slate-300 shrink-0 ml-1">
+            <span>Xếp theo</span>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as StartupSort)}
+              className="px-2 py-1.5 rounded-lg bg-surface-850 border border-white/[0.08] text-xs text-slate-100"
+            >
+              <option value="impact">Mức tác động</option>
+              <option value="name">Tên</option>
+              <option value="enabled">Đang bật trước</option>
+            </select>
+          </label>
         </div>
       </div>
 
       {/* Startup Items List */}
       <div className="rounded-2xl glass-panel overflow-hidden border border-white/[0.06]">
-        {isLoading && items.length === 0 ? (
-          <div className="p-12 text-center text-slate-400 flex flex-col items-center justify-center gap-3">
-            <Loader2 className="w-6 h-6 animate-spin text-cyan-400" />
+        {isLoading && !hasLoaded ? (
+          <div className="p-12 text-center text-slate-300 flex flex-col items-center justify-center gap-3" role="status">
+            <Loader2 className="w-6 h-6 animate-spin text-cyan-400" aria-hidden="true" />
             <span className="text-xs">Đang quét danh sách Registry Startup...</span>
+          </div>
+        ) : loadError && !hasLoaded ? (
+          <div className="p-10 flex flex-col items-center gap-3 text-xs text-rose-300 text-center">
+            <AlertCircle className="w-6 h-6" aria-hidden="true" />
+            <span>Không đọc được danh sách khởi động: {loadError}</span>
+            <button
+              onClick={() => loadStartupItems(true)}
+              className="px-3 py-1.5 rounded-lg bg-surface-850 text-slate-100 border border-white/[0.08] hover:bg-surface-800"
+            >
+              Thử lại
+            </button>
           </div>
         ) : (
           <div className="divide-y divide-white/[0.04]">
@@ -294,7 +340,7 @@ export const StartupManager: React.FC<StartupManagerProps> = ({ onNotify, onItem
                               : isMedium
                               ? "bg-amber-500/10 text-amber-400"
                               : "bg-cyan-500/10 text-cyan-400"
-                            : "bg-slate-800 text-slate-500"
+                            : "bg-slate-800 text-slate-400"
                         }`}
                       >
                         <Rocket className="w-4 h-4" />
@@ -347,7 +393,9 @@ export const StartupManager: React.FC<StartupManagerProps> = ({ onNotify, onItem
                       <button
                         role="switch"
                         aria-checked={item.enabled}
-                        onClick={() => handleToggle(item.id)}
+                        aria-label={`Khởi động ${item.name} cùng Windows`}
+                        disabled={isToggling}
+                        onClick={() => requestToggle(item)}
                         className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
                           item.enabled ? "bg-cyan-500 shadow-glow-cyan" : "bg-slate-700"
                         }`}
@@ -366,6 +414,29 @@ export const StartupManager: React.FC<StartupManagerProps> = ({ onNotify, onItem
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        isOpen={pendingDisable !== null}
+        title="Tắt khởi động cùng Windows"
+        tone="warning"
+        confirmLabel="Tắt khởi động"
+        isBusy={isToggling}
+        onCancel={() => setPendingDisable(null)}
+        onConfirm={() => pendingDisable && handleToggle(pendingDisable.id)}
+      >
+        {pendingDisable && (
+          <>
+            <p>
+              <b className="text-white">{pendingDisable.name}</b> sẽ không tự chạy khi đăng nhập Windows. Lệnh gốc trong
+              Registry được giữ nguyên (chỉ đổi cờ StartupApproved) — có thể bật lại bất cứ lúc nào.
+            </p>
+            <p className="text-[11px] font-mono text-slate-300 break-all">{pendingDisable.command}</p>
+            <p className="text-amber-200">
+              Ứng dụng như phần mềm diệt virus, driver âm thanh/touchpad hay đồng bộ đám mây có thể cần chạy cùng Windows.
+            </p>
+          </>
+        )}
+      </ConfirmDialog>
     </div>
   );
 };

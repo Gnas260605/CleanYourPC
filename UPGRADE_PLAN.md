@@ -118,13 +118,17 @@ Bảng luật match theo pattern path → mô tả tiếng Việt + mức an to�
 
 ## Giai đoạn 4 — Cải thiện giao diện
 
-- **Trạng thái thật:** loading skeleton, empty state, error state có nút thử lại cho mọi tab (hiện nhiều chỗ chỉ `console.warn`).
-- **Toast:** hàng đợi nhiều toast, phân loại success/warning/error (hiện chỉ có 1 kiểu cyan).
-- **Hộp thoại xác nhận dùng chung** (`ConfirmDialog`) cho kill process, xóa file, tắt startup, đổi service — focus trap, Esc để đóng.
-- **Khả năng truy cập:** `aria-label` cho nút icon, focus ring rõ, tương phản chữ `slate-400` trên nền tối ≥ 4.5:1, tôn trọng `prefers-reduced-motion` (tắt radar/scan animation).
-- **Bố cục:** Navbar thành sidebar dọc khi cửa sổ ≥ 1024px; bảng process/startup có sort + search; chiều rộng tối thiểu 800px không vỡ layout.
-- **Font:** đang tải Google Fonts qua mạng → đóng gói font local (app offline, khớp CSP).
-- **Tách component lớn** (`ProcessGuardian.tsx` 509 dòng, `SafeCleaner.tsx` 477 dòng) thành phần nhỏ khi sửa.
+- [x] **Trạng thái thật:** loading skeleton, empty state, error state có nút thử lại cho mọi tab (hiện nhiều chỗ chỉ `console.warn`).
+- [x] **Toast:** hàng đợi nhiều toast, phân loại success/warning/error (hiện chỉ có 1 kiểu cyan).
+- [x] **Hộp thoại xác nhận dùng chung** (`ConfirmDialog`) cho kill process, xóa file, tắt startup, đổi service — focus trap, Esc để đóng.
+- [x] **Khả năng truy cập:** `aria-label` cho nút icon, focus ring rõ, tương phản chữ `slate-400` trên nền tối ≥ 4.5:1, tôn trọng `prefers-reduced-motion` (tắt radar/scan animation).
+- [x] **Bố cục:** Navbar thành sidebar dọc khi cửa sổ ≥ 1024px; bảng process/startup có sort + search; chiều rộng tối thiểu 800px không vỡ layout.
+- [x] **Font:** đang tải Google Fonts qua mạng → đóng gói font local (app offline, khớp CSP).
+- [x] **Tách component lớn** (`ProcessGuardian.tsx` 509 dòng, `SafeCleaner.tsx` 477 dòng) thành phần nhỏ khi sửa.
+
+---
+
+> Ghi chú: đo tương phản thực tế — `slate-400` trên nền tối đạt 6.2–7.8:1 (đã đạt), lỗi thật là `slate-500/600` (2–4:1) → đã thay. Font đóng gói qua `@fontsource/*`, CSP bỏ Google Fonts. Đã kiểm tra bằng Playwright ở 800px và 1280px: không tràn ngang, không lỗi JS; trạng thái lỗi + "Thử lại" hiển thị đúng khi không có backend. Còn lại: `SettingsModal`, `HistoryModal`, `Titlebar` vẫn gọi `invoke` trực tiếp thay vì qua `apiBridge.ts`.
 
 ---
 

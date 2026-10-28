@@ -226,6 +226,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
 
             <button
               onClick={onClose}
+              aria-label="Đóng lịch sử"
               className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/[0.08] transition-colors"
             >
               <X className="w-4 h-4" />
@@ -310,7 +311,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
             </div>
           ) : filteredLogs.length === 0 ? (
             <div className="py-16 flex flex-col items-center justify-center text-center space-y-3">
-              <div className="w-12 h-12 rounded-2xl bg-surface-900/80 border border-white/[0.06] flex items-center justify-center text-slate-500">
+              <div className="w-12 h-12 rounded-2xl bg-surface-900/80 border border-white/[0.06] flex items-center justify-center text-slate-400">
                 <FileCheck className="w-6 h-6" />
               </div>
               <div>
@@ -337,7 +338,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
                     </span>
 
                     <span className="text-xs font-mono text-slate-400 flex items-center gap-1">
-                      <Clock className="w-3 h-3 text-slate-500" />
+                      <Clock className="w-3 h-3 text-slate-400" />
                       <span>{formatTimestamp(log.timestamp)}</span>
                     </span>
                   </div>
@@ -418,7 +419,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
         {/* Footer */}
         <div className="p-4 border-t border-white/[0.08] bg-surface-950/80 flex items-center justify-between text-xs text-slate-400 shrink-0">
           <div className="flex items-center gap-2">
-            <Calendar className="w-3.5 h-3.5 text-slate-500" />
+            <Calendar className="w-3.5 h-3.5 text-slate-400" />
             <span>Lưu trữ cục bộ an toàn trong Windows AppData</span>
           </div>
 

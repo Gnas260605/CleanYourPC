@@ -1,18 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { 
-  ShieldAlert, 
-  Cpu, 
-  Leaf, 
-  Search, 
-  ArrowUpDown, 
-  Lock, 
-  ShieldCheck,
-  RotateCw,
-  PowerOff,
-  AlertTriangle,
-  X,
-  Loader2
-} from "lucide-react";
+import { ShieldAlert, Leaf, Search, RotateCw, AlertCircle } from "lucide-react";
 import { ProcessInfo } from "@/types";
 import { formatBytes } from "@/utils/formatters";
 import { 
@@ -20,6 +7,10 @@ import {
   toggleEcoMode, 
   killProcessTree 
 } from "@/services/apiBridge";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
+import { ProcessRow } from "./ProcessRow";
+
+type SortKey = "memory" | "cpu" | "name" | "pid";
 
 interface ProcessGuardianProps {
   onNotify: (msg: string) => void;
@@ -36,28 +27,27 @@ export const ProcessGuardian: React.FC<ProcessGuardianProps> = ({ onNotify, onPr
   }, [processes, hasLoaded, onProcessesChange]);
   const [searchQuery, setSearchQuery] = useState("");
   const [safetyFilter, setSafetyFilter] = useState<"all" | "safe" | "critical" | "eco">("all");
-  const [sortBy, setSortBy] = useState<"memory" | "cpu">("memory");
+  const [sortBy, setSortBy] = useState<SortKey>("memory");
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [confirmKillProc, setConfirmKillProc] = useState<ProcessInfo | null>(null);
   const [isKilling, setIsKilling] = useState(false);
+  const [confirmEcoAll, setConfirmEcoAll] = useState(false);
+  const [isApplyingEcoAll, setIsApplyingEcoAll] = useState(false);
 
   // Fetch real process list from Windows kernel
   const fetchProcesses = async (isManual = false) => {
     if (isManual) setIsRefreshing(true);
     try {
       const realList = await fetchProcessList();
-      if (Array.isArray(realList) && realList.length > 0) {
-        setProcesses(realList);
-        setHasLoaded(true);
-        if (isManual) {
-          onNotify(`Đã cập nhật ${realList.length} tiến trình thực tế từ Windows API.`);
-        }
+      setProcesses(realList);
+      setHasLoaded(true);
+      setLoadError(null);
+      if (isManual) {
+        onNotify(`Đã cập nhật ${realList.length} tiến trình thực tế từ Windows API.`);
       }
     } catch (err) {
-      console.warn("Lỗi khi tải danh sách tiến trình:", err);
-      if (isManual) {
-        onNotify("Không thể kết nối đến Native Hardware Engine.");
-      }
+      setLoadError(err instanceof Error ? err.message : String(err));
     } finally {
       if (isManual) setIsRefreshing(false);
     }
@@ -136,36 +126,27 @@ export const ProcessGuardian: React.FC<ProcessGuardianProps> = ({ onNotify, onPr
     }
   };
 
-  // Quick Action: Put all safe heavy processes into Eco-Mode
+  // Bật Eco-Mode cho mọi tiến trình không cốt lõi — chỉ đánh dấu những tiến trình thực sự thành công
+  const ecoAllTargets = processes.filter((p) => !p.is_critical && !p.is_eco_mode);
   const handleQuickOptimizeAll = async () => {
-    const targets = processes.filter((p) => !p.is_critical && !p.is_eco_mode);
-    if (targets.length === 0) {
-      onNotify("Tất cả tiến trình an toàn đã ở chế độ Eco-Mode.");
-      return;
-    }
-
-    let optimizedCount = 0;
-    for (const proc of targets) {
+    setIsApplyingEcoAll(true);
+    const succeeded = new Set<number>();
+    for (const proc of ecoAllTargets) {
       try {
-        const ok = await toggleEcoMode(proc.pid, true);
-        if (ok) optimizedCount++;
+        if (await toggleEcoMode(proc.pid, true)) succeeded.add(proc.pid);
       } catch {
-        // Continue with others
+        // Tiếp tục với tiến trình khác (tiến trình có thể đã thoát hoặc thiếu quyền)
       }
     }
-
-    setProcesses((prev) =>
-      prev.map((proc) => {
-        if (!proc.is_critical && !proc.is_eco_mode) {
-          return {
-            ...proc,
-            is_eco_mode: true,
-          };
-        }
-        return proc;
-      })
+    setProcesses((prev) => prev.map((p) => (succeeded.has(p.pid) ? { ...p, is_eco_mode: true } : p)));
+    const failed = ecoAllTargets.length - succeeded.size;
+    onNotify(
+      failed > 0
+        ? `Đã bật Eco-Mode cho ${succeeded.size} tiến trình; ${failed} tiến trình bỏ qua (đã thoát hoặc thiếu quyền).`
+        : `Đã bật Eco-Mode cho ${succeeded.size} tiến trình.`
     );
-    onNotify(`Đã kích hoạt Eco-Mode cho ${optimizedCount} ứng dụng an toàn! Giảm áp lực RAM.`);
+    setIsApplyingEcoAll(false);
+    setConfirmEcoAll(false);
   };
 
   // Filter & Sort
@@ -184,8 +165,16 @@ export const ProcessGuardian: React.FC<ProcessGuardianProps> = ({ onNotify, onPr
       return matchesSearch && matchesSafety;
     })
     .sort((a, b) => {
-      if (sortBy === "memory") return b.memory_bytes - a.memory_bytes;
-      return b.cpu_usage - a.cpu_usage;
+      switch (sortBy) {
+        case "memory":
+          return b.memory_bytes - a.memory_bytes;
+        case "cpu":
+          return b.cpu_usage - a.cpu_usage;
+        case "name":
+          return a.name.localeCompare(b.name);
+        case "pid":
+          return a.pid - b.pid;
+      }
     });
 
   const totalSafeMemory = processes
@@ -218,6 +207,7 @@ export const ProcessGuardian: React.FC<ProcessGuardianProps> = ({ onNotify, onPr
               onClick={() => fetchProcesses(true)}
               disabled={isRefreshing}
               title="Làm mới danh sách tiến trình"
+              aria-label="Làm mới danh sách tiến trình"
               className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-medium bg-surface-850 hover:bg-surface-800 text-slate-300 hover:text-white border border-white/[0.08] transition-all disabled:opacity-50"
             >
               <RotateCw className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin text-cyan-400" : ""}`} />
@@ -226,8 +216,9 @@ export const ProcessGuardian: React.FC<ProcessGuardianProps> = ({ onNotify, onPr
 
             {/* Quick Eco-Mode All */}
             <button
-              onClick={handleQuickOptimizeAll}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 hover:from-emerald-500/30 hover:to-cyan-500/30 text-emerald-300 border border-emerald-500/40 font-semibold text-xs transition-all shadow-glow-emerald/30 active:scale-95"
+              onClick={() => setConfirmEcoAll(true)}
+              disabled={ecoAllTargets.length === 0}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 hover:from-emerald-500/30 hover:to-cyan-500/30 text-emerald-300 border border-emerald-500/40 font-semibold text-xs transition-all shadow-glow-emerald/30 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Leaf className="w-4 h-4 text-emerald-400" />
               <span>Eco-Mode Toàn Bộ App An Toàn</span>
@@ -253,7 +244,7 @@ export const ProcessGuardian: React.FC<ProcessGuardianProps> = ({ onNotify, onPr
       </div>
 
       {/* Filter and Sort Toolbar */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3">
         <div className="relative w-full sm:w-80">
           <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
@@ -261,11 +252,12 @@ export const ProcessGuardian: React.FC<ProcessGuardianProps> = ({ onNotify, onPr
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Tìm tiến trình theo tên, PID..."
+            aria-label="Tìm tiến trình"
             className="w-full pl-10 pr-4 py-2 rounded-xl bg-surface-900/80 border border-white/[0.08] text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-violet-500/50 focus:ring-1 focus:ring-violet-500/50"
           />
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto">
+        <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
           {/* Safety Filter */}
           {(
             [
@@ -278,7 +270,8 @@ export const ProcessGuardian: React.FC<ProcessGuardianProps> = ({ onNotify, onPr
             <button
               key={filter.key}
               onClick={() => setSafetyFilter(filter.key)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              aria-pressed={safetyFilter === filter.key}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap shrink-0 transition-all ${
                 safetyFilter === filter.key
                   ? "bg-violet-500/20 text-violet-300 border border-violet-500/30"
                   : "bg-surface-900/60 text-slate-400 hover:text-slate-200 border border-white/[0.04]"
@@ -288,230 +281,110 @@ export const ProcessGuardian: React.FC<ProcessGuardianProps> = ({ onNotify, onPr
             </button>
           ))}
 
-          {/* Sort By Toggle */}
-          <button
-            onClick={() => setSortBy((prev) => (prev === "memory" ? "cpu" : "memory"))}
-            className="px-3 py-1.5 rounded-lg text-xs font-mono flex items-center gap-1 bg-surface-850 border border-white/[0.08] text-slate-300 hover:text-white"
-          >
-            <ArrowUpDown className="w-3.5 h-3.5 text-cyan-400" />
-            <span>Xếp theo: {sortBy === "memory" ? "RAM MB" : "CPU %"}</span>
-          </button>
+          {/* Sắp xếp */}
+          <label className="flex items-center gap-1.5 text-xs text-slate-300 shrink-0">
+            <span>Xếp theo</span>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as SortKey)}
+              className="px-2 py-1.5 rounded-lg bg-surface-850 border border-white/[0.08] text-xs text-slate-100"
+            >
+              <option value="memory">RAM</option>
+              <option value="cpu">CPU %</option>
+              <option value="name">Tên</option>
+              <option value="pid">PID</option>
+            </select>
+          </label>
         </div>
       </div>
 
       {/* Process Table List */}
       <div className="rounded-2xl glass-panel overflow-hidden border border-white/[0.06]">
-        <div className="divide-y divide-white/[0.04]">
-          {filteredProcesses.length === 0 ? (
-            <div className="p-8 text-center text-slate-400 text-xs">
-              Không tìm thấy tiến trình nào phù hợp với bộ lọc.
-            </div>
-          ) : (
-            filteredProcesses.map((proc) => {
-              const isCritical = proc.is_critical;
-              const isEco = proc.is_eco_mode;
-
-              return (
-                <div
-                  key={proc.pid}
-                  className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-colors hover:bg-white/[0.02]"
-                >
-                  {/* Left: Process Info */}
-                  <div className="flex items-start gap-3.5 min-w-0">
-                    <div
-                      className={`p-2.5 rounded-xl shrink-0 mt-0.5 ${
-                        isCritical
-                          ? "bg-rose-500/10 text-rose-400 border border-rose-500/20"
-                          : isEco
-                          ? "bg-cyan-500/15 text-cyan-400 border border-cyan-500/30"
-                          : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                      }`}
-                    >
-                      {isCritical ? (
-                        <Lock className="w-4 h-4" />
-                      ) : (
-                        <Cpu className="w-4 h-4" />
-                      )}
-                    </div>
-
-                    <div className="min-w-0 space-y-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold text-sm text-slate-100">
-                          {proc.name}
-                        </span>
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-surface-950 border border-white/[0.06] text-slate-400">
-                          PID: {proc.pid}
-                        </span>
-
-                        {/* Critical / Eco Badge */}
-                        {isCritical ? (
-                          <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-rose-500/15 text-rose-400 border border-rose-500/30 flex items-center gap-1">
-                            <ShieldCheck className="w-3 h-3 text-rose-400" />
-                            Cốt lõi Windows
-                          </span>
-                        ) : (
-                          <span
-                            className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
-                              isEco
-                                ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
-                                : "bg-cyan-500/10 text-cyan-400 border-cyan-500/20"
-                            }`}
-                          >
-                            {isEco ? "🌱 Eco-Mode" : "⚡ Đang chạy"}
-                          </span>
-                        )}
-                      </div>
-
-                      <p className="text-xs text-slate-400 truncate max-w-lg">
-                        {proc.description || (isCritical ? "Tiến trình hệ thống Windows thiết yếu" : "Ứng dụng người dùng")}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Right: Metrics & Actions */}
-                  <div className="flex items-center gap-4 shrink-0 self-end sm:self-center">
-                    {/* Memory & CPU stats */}
-                    <div className="text-right">
-                      <div className="font-mono text-sm font-bold text-white">
-                        {formatBytes(proc.memory_bytes)}
-                      </div>
-                      <div className="font-mono text-xs text-cyan-400">
-                        {proc.cpu_usage.toFixed(1)}% CPU
-                      </div>
-                    </div>
-
-                    {/* Actions buttons */}
-                    <div className="flex items-center gap-2">
-                      {/* Eco Mode Toggle */}
-                      <button
-                        onClick={() => handleToggleEcoMode(proc)}
-                        disabled={isCritical}
-                        className={`p-2 rounded-xl text-xs font-medium transition-all ${
-                          isCritical
-                            ? "bg-surface-900 text-slate-600 border border-white/[0.03] cursor-not-allowed opacity-50"
-                            : isEco
-                            ? "bg-emerald-500 text-black shadow-glow-emerald font-semibold"
-                            : "bg-surface-850 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                        }`}
-                        title={
-                          isCritical
-                            ? "Tiến trình cốt lõi - Cấm áp dụng Eco-Mode"
-                            : isEco
-                            ? "Tắt Eco-Mode"
-                            : "Bật Eco-Mode (tiết kiệm bộ nhớ)"
-                        }
-                      >
-                        <Leaf className="w-4 h-4" />
-                      </button>
-
-                      {/* Kill Process Button */}
-                      {isCritical ? (
-                        <div
-                          className="p-2 rounded-xl bg-surface-900 border border-rose-500/20 text-rose-500/40 cursor-not-allowed opacity-60"
-                          title="Tiến trình hệ thống cốt lõi - Cấm can thiệp theo RULE.md (Zero-Harm Guarantee)"
-                        >
-                          <Lock className="w-4 h-4" />
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => setConfirmKillProc(proc)}
-                          className="p-2 rounded-xl bg-surface-850 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 border border-rose-500/30 hover:border-rose-500/50 transition-all"
-                          title={`Đóng tiến trình ${proc.name} (kill_process_tree)`}
-                        >
-                          <PowerOff className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
+        {!hasLoaded && !loadError ? (
+          <ul className="divide-y divide-white/[0.04]" aria-busy="true" aria-label="Đang tải danh sách tiến trình">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <li key={i} className="p-4 flex items-center gap-4">
+                <div className="w-9 h-9 rounded-xl bg-surface-800 animate-pulse" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-3 w-40 rounded bg-surface-800 animate-pulse" />
+                  <div className="h-2.5 w-64 rounded bg-surface-850 animate-pulse" />
                 </div>
-              );
-            })
-          )}
-        </div>
+              </li>
+            ))}
+          </ul>
+        ) : loadError && processes.length === 0 ? (
+          <div className="p-10 flex flex-col items-center gap-3 text-xs text-rose-300 text-center">
+            <AlertCircle className="w-6 h-6" aria-hidden="true" />
+            <span>Không đọc được danh sách tiến trình: {loadError}</span>
+            <button
+              onClick={() => fetchProcesses(true)}
+              className="px-3 py-1.5 rounded-lg bg-surface-850 text-slate-100 border border-white/[0.08] hover:bg-surface-800"
+            >
+              Thử lại
+            </button>
+          </div>
+        ) : filteredProcesses.length === 0 ? (
+          <div className="p-8 text-center text-slate-300 text-xs">Không tìm thấy tiến trình nào phù hợp với bộ lọc.</div>
+        ) : (
+          <ul className="divide-y divide-white/[0.04]">
+            {filteredProcesses.map((proc) => (
+              <ProcessRow
+                key={proc.pid}
+                proc={proc}
+                onToggleEco={handleToggleEcoMode}
+                onRequestKill={setConfirmKillProc}
+              />
+            ))}
+          </ul>
+        )}
       </div>
 
-      {/* Confirmation Modal for Kill Process Tree */}
-      {confirmKillProc && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in">
-          <div className="w-full max-w-md p-6 rounded-3xl glass-panel border border-rose-500/30 shadow-glow-rose space-y-4">
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-3">
-                <div className="p-3 rounded-2xl bg-rose-500/10 text-rose-400 border border-rose-500/20">
-                  <AlertTriangle className="w-6 h-6" />
-                </div>
-                <div>
-                  <h3 className="font-display font-bold text-lg text-white">
-                    Đóng cây tiến trình?
-                  </h3>
-                  <p className="text-xs text-slate-400">
-                    Xác nhận kết thúc an toàn (kill_process_tree)
-                  </p>
-                </div>
+      <ConfirmDialog
+        isOpen={confirmKillProc !== null}
+        title="Đóng cây tiến trình?"
+        tone="danger"
+        confirmLabel="Đóng tiến trình"
+        isBusy={isKilling}
+        onCancel={() => setConfirmKillProc(null)}
+        onConfirm={handleKillProcess}
+      >
+        {confirmKillProc && (
+          <>
+            <dl className="p-3 rounded-xl bg-surface-950/80 border border-white/[0.06] space-y-1.5">
+              <div className="flex justify-between gap-2">
+                <dt className="text-slate-300">Tên tiến trình</dt>
+                <dd className="font-semibold text-white">{confirmKillProc.name}</dd>
               </div>
-              <button
-                onClick={() => setConfirmKillProc(null)}
-                className="text-slate-400 hover:text-white"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-4 rounded-xl bg-surface-950/80 border border-white/[0.06] text-xs space-y-2 text-slate-300">
-              <div className="flex justify-between">
-                <span className="text-slate-400">Tên tiến trình:</span>
-                <span className="font-semibold text-white">{confirmKillProc.name}</span>
+              <div className="flex justify-between gap-2">
+                <dt className="text-slate-300">PID</dt>
+                <dd className="font-mono text-cyan-300">{confirmKillProc.pid}</dd>
               </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">PID:</span>
-                <span className="font-mono text-cyan-400">{confirmKillProc.pid}</span>
+              <div className="flex justify-between gap-2">
+                <dt className="text-slate-300">RAM đang dùng</dt>
+                <dd className="font-mono font-bold text-white">{formatBytes(confirmKillProc.memory_bytes)}</dd>
               </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">RAM đang chiếm:</span>
-                <span className="font-mono font-bold text-white">
-                  {formatBytes(confirmKillProc.memory_bytes)}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">CPU Usage:</span>
-                <span className="font-mono text-amber-400">
-                  {confirmKillProc.cpu_usage.toFixed(1)}%
-                </span>
-              </div>
-            </div>
-
-            <p className="text-xs text-rose-300">
-              ⚠️ Cảnh báo: Mọi tài liệu chưa lưu trong ứng dụng này sẽ bị mất khi tiến trình bị đóng. Bạn có chắc chắn muốn tiếp tục?
+            </dl>
+            <p className="text-rose-200">
+              ⚠️ Tiến trình và mọi tiến trình con sẽ bị đóng ngay. Tài liệu chưa lưu trong ứng dụng này sẽ bị mất.
             </p>
+          </>
+        )}
+      </ConfirmDialog>
 
-            <div className="flex items-center justify-end gap-3 pt-2">
-              <button
-                onClick={() => setConfirmKillProc(null)}
-                disabled={isKilling}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-white bg-surface-850 hover:bg-surface-800 transition-colors"
-              >
-                Hủy bỏ
-              </button>
-              <button
-                onClick={handleKillProcess}
-                disabled={isKilling}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-rose-600 hover:bg-rose-500 transition-all shadow-glow-rose disabled:opacity-50"
-              >
-                {isKilling ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Đang đóng...</span>
-                  </>
-                ) : (
-                  <>
-                    <PowerOff className="w-4 h-4" />
-                    <span>Đóng tiến trình</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        isOpen={confirmEcoAll}
+        title="Bật Eco-Mode hàng loạt"
+        tone="warning"
+        confirmLabel={`Bật Eco-Mode cho ${ecoAllTargets.length} tiến trình`}
+        isBusy={isApplyingEcoAll}
+        onCancel={() => setConfirmEcoAll(false)}
+        onConfirm={handleQuickOptimizeAll}
+      >
+        <p>
+          Windows sẽ ưu tiên tiết kiệm năng lượng cho <b className="text-white">{ecoAllTargets.length}</b> tiến trình không
+          cốt lõi (EcoQoS). Ứng dụng đang dùng có thể chạy chậm hơn — tắt lại từng tiến trình bằng nút 🌱.
+        </p>
+      </ConfirmDialog>
     </div>
   );
 };

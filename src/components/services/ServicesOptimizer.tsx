@@ -186,7 +186,7 @@ export const ServicesOptimizer: React.FC<ServicesOptimizerProps> = ({ onNotify }
             key={tab.id}
             onClick={() => setFilterType(tab.id)}
             aria-pressed={filterType === tab.id}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all focus-visible:ring-2 focus-visible:ring-cyan-400 ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap shrink-0 transition-all focus-visible:ring-2 focus-visible:ring-cyan-400 ${
               filterType === tab.id
                 ? "bg-cyan-500/20 text-cyan-200 border border-cyan-500/30"
                 : "bg-surface-900/60 text-slate-300 hover:text-slate-100 border border-white/[0.04]"

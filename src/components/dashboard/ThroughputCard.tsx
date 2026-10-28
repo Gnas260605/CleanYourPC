@@ -32,9 +32,6 @@ export const ThroughputCard: React.FC<ThroughputCardProps> = ({ disk, network })
               <p className="text-xs text-slate-400">Tốc độ đọc / ghi tức thời</p>
             </div>
           </div>
-          <span className="text-xs font-mono px-2 py-0.5 rounded bg-surface-900 border border-white/[0.08] text-violet-300">
-            NVMe Gen4
-          </span>
         </div>
 
         {/* Real-time Read / Write Metrics */}

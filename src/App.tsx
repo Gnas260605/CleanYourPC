@@ -13,7 +13,7 @@ import { HistoryModal } from "./components/history/HistoryModal";
 import { useHardwareMetrics, isTauriContext } from "./hooks/useHardwareMetrics";
 import { useNavBadges } from "./hooks/useNavBadges";
 import { ActiveTab, AppSettings } from "./types";
-import { CheckCircle2, X } from "lucide-react";
+import { ToastStack, useToasts } from "./components/common/ToastStack";
 
 const DEFAULT_SETTINGS: AppSettings = {
   auto_start_on_boot: false,
@@ -24,7 +24,6 @@ const DEFAULT_SETTINGS: AppSettings = {
 
 export function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("dashboard");
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
@@ -68,12 +67,7 @@ export function App() {
 
   const badges = useNavBadges();
 
-  const showNotification = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => {
-      setToastMessage((prev) => (prev === msg ? null : prev));
-    }, 4500);
-  };
+  const { toasts, notify: showNotification, dismiss: dismissToast } = useToasts();
 
   return (
     <div className="h-screen max-h-screen w-full flex flex-col bg-surface-950 text-slate-100 cyber-bg subtle-grid selection:bg-cyan-500/30 selection:text-white overflow-hidden">
@@ -91,61 +85,66 @@ export function App() {
         onOpenHistory={() => setIsHistoryOpen(true)}
       />
 
-      {/* 3. Navigation Bar */}
-      <Navbar
-        activeTab={activeTab}
-        onSelectTab={setActiveTab}
-        startupCount={badges.startupCount}
-        junkBytes={badges.junkBytes}
-        heavyProcessCount={badges.heavyProcessCount}
-      />
+      {/* 3. Thanh điều hướng (ngang) / sidebar (≥ 1024px) + nội dung */}
+      <div className="flex-1 min-h-0 flex flex-col lg:flex-row">
+        <Navbar
+          activeTab={activeTab}
+          onSelectTab={setActiveTab}
+          startupCount={badges.startupCount}
+          junkBytes={badges.junkBytes}
+          heavyProcessCount={badges.heavyProcessCount}
+        />
 
-      {/* 4. Main Content Area */}
-      <main className="flex-1 min-h-0 w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 overflow-y-auto">
-        {activeTab === "dashboard" && metricsStatus === "offline" && (
-          <div className="mb-6 p-4 rounded-2xl border border-rose-500/30 bg-rose-500/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-rose-200">
-            <span>
-              Không kết nối được backend đo phần cứng. Số liệu bên dưới chưa phải dữ liệu thật — hãy chạy WinPulse bằng
-              ứng dụng desktop.
-            </span>
-            <button
-              onClick={retryMetrics}
-              className="px-3 py-1.5 rounded-lg bg-surface-850 text-slate-100 border border-white/[0.08] hover:bg-surface-800 shrink-0"
-            >
-              Thử lại
-            </button>
+        {/* 4. Main Content Area */}
+        <main className="flex-1 min-h-0 min-w-0 w-full p-4 sm:p-6 lg:p-8 overflow-y-auto">
+          <div className="max-w-7xl mx-auto">
+            {activeTab === "dashboard" && metricsStatus === "offline" && (
+              <div className="mb-6 p-4 rounded-2xl border border-rose-500/30 bg-rose-500/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-rose-200">
+                <span>
+                  Không kết nối được backend đo phần cứng. Số liệu bên dưới chưa phải dữ liệu thật — hãy chạy WinPulse bằng
+                  ứng dụng desktop.
+                </span>
+                <button
+                  onClick={retryMetrics}
+                  className="px-3 py-1.5 rounded-lg bg-surface-850 text-slate-100 border border-white/[0.08] hover:bg-surface-800 shrink-0"
+                >
+                  Thử lại
+                </button>
+              </div>
+            )}
+
+            {activeTab === "dashboard" && (
+              <DashboardPage
+                metrics={metrics}
+                hasData={metricsStatus === "live" || metricsStatus === "mock"}
+                onBoostNotification={showNotification}
+                visualEffectsEnabled={settings.visual_effects}
+              />
+            )}
+
+            {activeTab === "startup" && (
+              <StartupManager onNotify={showNotification} onItemsChange={badges.onStartupItemsChange} />
+            )}
+
+            {activeTab === "process" && (
+              <ProcessGuardian onNotify={showNotification} onProcessesChange={badges.onProcessesChange} />
+            )}
+
+            {activeTab === "cleaner" && (
+              <SafeCleaner onNotify={showNotification} onScanComplete={badges.onJunkScanned} />
+            )}
+
+            {/* Giữ Disk Analyzer luôn mount để phiên quét đang chạy không mất kết quả khi chuyển tab */}
+            <div hidden={activeTab !== "analyzer"}>
+              <DiskAnalyzer onNotify={showNotification} />
+            </div>
+
+            {activeTab === "services" && (
+              <ServicesOptimizer onNotify={showNotification} />
+            )}
           </div>
-        )}
-
-        {activeTab === "dashboard" && (
-          <DashboardPage
-            metrics={metrics}
-            onBoostNotification={showNotification}
-            visualEffectsEnabled={settings.visual_effects}
-          />
-        )}
-
-        {activeTab === "startup" && (
-          <StartupManager onNotify={showNotification} onItemsChange={badges.onStartupItemsChange} />
-        )}
-
-        {activeTab === "process" && (
-          <ProcessGuardian onNotify={showNotification} onProcessesChange={badges.onProcessesChange} />
-        )}
-
-        {activeTab === "cleaner" && (
-          <SafeCleaner onNotify={showNotification} onScanComplete={badges.onJunkScanned} />
-        )}
-
-        {/* Giữ Disk Analyzer luôn mount để phiên quét đang chạy không mất kết quả khi chuyển tab */}
-        <div hidden={activeTab !== "analyzer"}>
-          <DiskAnalyzer onNotify={showNotification} />
-        </div>
-
-        {activeTab === "services" && (
-          <ServicesOptimizer onNotify={showNotification} />
-        )}
-      </main>
+        </main>
+      </div>
 
       {/* 5. Settings Modal */}
       <SettingsModal
@@ -162,19 +161,8 @@ export function App() {
         onNotify={showNotification}
       />
 
-      {/* Modern Toast Notification */}
-      {toastMessage && (
-        <div className="fixed bottom-12 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-2xl bg-surface-900/95 border border-cyan-500/40 shadow-glow-cyan text-xs text-white backdrop-blur-xl animate-in slide-in-from-bottom-5">
-          <CheckCircle2 className="w-4 h-4 text-cyan-400 shrink-0" />
-          <span className="font-medium">{toastMessage}</span>
-          <button
-            onClick={() => setToastMessage(null)}
-            className="text-slate-400 hover:text-white ml-2"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      )}
+      {/* Hàng đợi thông báo */}
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
 
       {/* Footer Status Bar */}
       <footer className="h-9 shrink-0 border-t border-white/[0.05] bg-surface-950/90 px-6 flex items-center justify-between text-[11px] text-slate-400 select-none">

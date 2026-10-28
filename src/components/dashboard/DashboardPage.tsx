@@ -20,6 +20,8 @@ import { triggerQuickBoost } from "@/services/apiBridge";
 
 interface DashboardPageProps {
   metrics: HardwareMetrics;
+  /** false khi chưa có số liệu thật/giả lập (đang kết nối hoặc mất kết nối backend) */
+  hasData?: boolean;
   onRefresh?: () => void;
   onBoostNotification: (msg: string) => void;
   visualEffectsEnabled?: boolean;
@@ -27,6 +29,7 @@ interface DashboardPageProps {
 
 export const DashboardPage: React.FC<DashboardPageProps> = ({
   metrics,
+  hasData = true,
   onRefresh,
   onBoostNotification,
   visualEffectsEnabled = true,
@@ -90,10 +93,16 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             </div>
 
             <h1 className="font-display font-extrabold text-2xl lg:text-3xl tracking-tight text-white">
-              Hiệu suất Windows đang ở mức{" "}
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-violet-300 to-emerald-400">
-                {healthScore >= 85 ? "Rất Tốt" : healthScore >= 70 ? "Khá Tốt" : "Cần Tối Ưu"}
-              </span>
+              {hasData ? (
+                <>
+                  Hiệu suất Windows đang ở mức{" "}
+                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-violet-300 to-emerald-400">
+                    {healthScore >= 85 ? "Rất Tốt" : healthScore >= 70 ? "Khá Tốt" : "Cần Tối Ưu"}
+                  </span>
+                </>
+              ) : (
+                "Đang chờ số liệu từ backend..."
+              )}
             </h1>
 
             <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">

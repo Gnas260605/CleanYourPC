@@ -172,6 +172,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </div>
           <button
             onClick={onClose}
+            aria-label="Đóng cài đặt"
             className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/[0.08] transition-colors"
           >
             <X className="w-4 h-4" />
@@ -348,7 +349,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <Info className="w-4 h-4 text-slate-400" />
                   <div>
                     <span className="font-semibold text-slate-200">WinPulse Optimizer v1.0.0</span>
-                    <span className="text-[10px] text-slate-500 ml-2 font-mono">MIT License</span>
+                    <span className="text-[10px] text-slate-400 ml-2 font-mono">MIT License</span>
                   </div>
                 </div>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-surface-800 text-slate-400 border border-white/[0.05]">
@@ -386,7 +387,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-semibold tracking-wide transition-all ${
                 hasChanges && !isSaving
                   ? "bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-glow-cyan hover:brightness-110 active:scale-95"
-                  : "bg-surface-800 text-slate-500 cursor-not-allowed"
+                  : "bg-surface-800 text-slate-400 cursor-not-allowed"
               }`}
             >
               {isSaving ? (

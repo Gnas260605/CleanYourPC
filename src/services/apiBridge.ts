@@ -49,7 +49,14 @@ async function readOnly<T>(
   if (isTauriContext()) {
     return invokeCommand<T>(cmd, args);
   }
-  const res = await fetch(`${LOCAL_HTTP_BASE}${httpPath}`);
+  let res: Response;
+  try {
+    res = await fetch(`${LOCAL_HTTP_BASE}${httpPath}`);
+  } catch {
+    throw new Error(
+      `${errorMessage}: không kết nối được backend. Chế độ trình duyệt cần app desktop bản debug đang chạy (npx @tauri-apps/cli dev).`
+    );
+  }
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${errorMessage}`);
   return (await res.json()) as T;
 }

@@ -136,7 +136,7 @@ export const Titlebar: React.FC<TitlebarProps> = ({ onNotify }) => {
         </div>
 
         {/* Protection Badge */}
-        <div className="hidden sm:flex items-center gap-1.5 ml-3 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 text-[10px] font-medium pointer-events-none">
+        <div className="hidden sm:flex items-center gap-1.5 ml-3 px-2 py-0.5 whitespace-nowrap rounded-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 text-[10px] font-medium pointer-events-none">
           <span className="relative flex h-1.5 w-1.5">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
             <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
@@ -156,7 +156,7 @@ export const Titlebar: React.FC<TitlebarProps> = ({ onNotify }) => {
           onClick={handleMinimize}
           className="h-full w-11 flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/[0.08] transition-colors focus:outline-none"
           title="Thu nhỏ (Minimize)"
-          aria-label="Minimize"
+          aria-label="Thu nhỏ"
         >
           <Minus className="w-3.5 h-3.5" />
         </button>
@@ -166,7 +166,7 @@ export const Titlebar: React.FC<TitlebarProps> = ({ onNotify }) => {
           onClick={handleToggleMaximize}
           className="h-full w-11 flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/[0.08] transition-colors focus:outline-none"
           title={isMaximized ? "Khôi phục (Restore)" : "Phóng to (Maximize)"}
-          aria-label={isMaximized ? "Restore" : "Maximize"}
+          aria-label={isMaximized ? "Khôi phục kích thước" : "Phóng to"}
         >
           {isMaximized ? (
             <Copy className="w-3 h-3 rotate-180" />
@@ -180,7 +180,7 @@ export const Titlebar: React.FC<TitlebarProps> = ({ onNotify }) => {
           onClick={handleClose}
           className="h-full w-11 flex items-center justify-center text-slate-400 hover:text-white hover:bg-rose-600 transition-colors focus:outline-none"
           title="Đóng (Close)"
-          aria-label="Close"
+          aria-label="Đóng"
         >
           <X className="w-3.5 h-3.5" />
         </button>

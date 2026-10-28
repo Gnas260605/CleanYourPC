@@ -281,7 +281,7 @@ export const DiskAnalyzer: React.FC<DiskAnalyzerProps> = ({ onNotify }) => {
             <button
               onClick={() => setFilter("all")}
               aria-pressed={filter === "all"}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium border focus-visible:ring-2 focus-visible:ring-sky-400 ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap shrink-0 border focus-visible:ring-2 focus-visible:ring-sky-400 ${
                 filter === "all" ? "bg-sky-500/20 text-sky-100 border-sky-500/40" : "bg-surface-900/60 text-slate-200 border-white/[0.06]"
               }`}
             >
@@ -293,7 +293,7 @@ export const DiskAnalyzer: React.FC<DiskAnalyzerProps> = ({ onNotify }) => {
                 onClick={() => setFilter(s)}
                 aria-pressed={filter === s}
                 title={SAFETY_META[s].hint}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium border focus-visible:ring-2 focus-visible:ring-sky-400 ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap shrink-0 border focus-visible:ring-2 focus-visible:ring-sky-400 ${
                   filter === s ? SAFETY_META[s].badge : "bg-surface-900/60 text-slate-200 border-white/[0.06]"
                 }`}
               >

@@ -113,6 +113,8 @@ export const Header: React.FC<HeaderProps> = ({
         {MOCK_METRICS_ENABLED && (
         <button
           onClick={onToggleHighLoad}
+          aria-label="Bật/tắt mô phỏng quá tải (chỉ dev)"
+          aria-pressed={isHighLoadSim}
           title="Mô phỏng trạng thái CPU/RAM quá tải để kiểm thử giao diện cảnh báo"
           className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-mono transition-all ${
             isHighLoadSim
