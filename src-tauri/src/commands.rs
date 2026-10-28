@@ -1,11 +1,12 @@
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, State, Window};
+use tauri::{AppHandle, Emitter, State, Window};
 use tracing::{info, warn};
 
 use crate::cleaner::{self, CleanResult, CleanScanResult, CleanerSession};
 use crate::config::{self, AppSettings};
+use crate::disk_analyzer::{self, DiskAnalyzerState, DiskScanComplete, RecycleResult};
 use crate::error::AppError;
 use crate::history::{self, HistorySummary, OptimizationLog};
 use crate::metrics::{HardwareMetrics, MetricsState, SystemInfo};
@@ -196,6 +197,146 @@ pub async fn clean_files(
     }
 
     Ok(result)
+}
+
+// ==========================================
+// DISK ANALYZER (Phân tích ổ đĩa)
+// ==========================================
+
+/// Tổng dung lượng ổ đĩa chứa `path` (0 nếu không xác định)
+fn volume_total_bytes(path: &std::path::Path) -> u64 {
+    let disks = sysinfo::Disks::new_with_refreshed_list();
+    disks
+        .iter()
+        .filter(|d| crate::safety::PathSafetyValidator::is_under_root(path, d.mount_point()))
+        .max_by_key(|d| d.mount_point().as_os_str().len())
+        .map(|d| d.total_space())
+        .unwrap_or(0)
+}
+
+/// Tauri Command: Bắt đầu quét thư mục dung lượng lớn (chạy nền).
+/// Tiến độ qua sự kiện `disk-scan-progress`, kết quả qua `disk-scan-complete`.
+/// `roots = None` → quét các thư mục mặc định (hồ sơ người dùng, ProgramData, Windows Update, Windows.old).
+#[tauri::command]
+pub async fn start_large_folder_scan(
+    app: AppHandle,
+    state: State<'_, Arc<DiskAnalyzerState>>,
+    roots: Option<Vec<String>>,
+    min_size_mb: Option<u64>,
+) -> Result<(), AppError> {
+    let min_mb = min_size_mb
+        .unwrap_or(disk_analyzer::DEFAULT_MIN_SIZE_MB)
+        .max(disk_analyzer::MIN_SIZE_MB_FLOOR);
+    let (roots, include_system_files) = match roots {
+        Some(list) if !list.is_empty() => (
+            list.iter()
+                .map(|r| disk_analyzer::validate_custom_root(r))
+                .collect::<Result<Vec<_>, AppError>>()?,
+            false,
+        ),
+        _ => (disk_analyzer::default_roots(), true),
+    };
+    let roots = disk_analyzer::dedupe_roots(roots);
+    if roots.is_empty() {
+        return Err(AppError::InvalidPath("Không có thư mục gốc hợp lệ để quét".to_string()));
+    }
+
+    let state = state.inner().clone();
+    if !state.try_begin() {
+        return Err(AppError::InvalidState("Đang có một phiên quét khác chạy".to_string()));
+    }
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let started = std::time::Instant::now();
+        let progress_app = app.clone();
+        let out = disk_analyzer::scan(
+            &roots,
+            min_mb * 1024 * 1024,
+            include_system_files,
+            state.cancel_flag(),
+            |p| {
+                let _ = progress_app.emit("disk-scan-progress", p);
+            },
+        );
+
+        let stored = state.set_roots(roots.clone()).and_then(|_| {
+            state.session.replace(
+                "disk",
+                out.items.iter().map(|i| (i.id.clone(), i.clone())).collect(),
+            )
+        });
+        let (scan_id, error) = match stored {
+            Ok(id) => (id, None),
+            Err(e) => (String::new(), Some(e.to_string())),
+        };
+
+        let payload = DiskScanComplete {
+            scan_id,
+            items: out.items,
+            cancelled: out.cancelled,
+            elapsed_ms: started.elapsed().as_millis() as u64,
+            roots: roots.iter().map(|r| r.to_string_lossy().to_string()).collect(),
+            dirs_scanned: out.dirs_scanned,
+            bytes_counted: out.bytes_counted,
+            volume_total_bytes: roots.first().map(|r| volume_total_bytes(r)).unwrap_or(0),
+            error,
+        };
+        info!(
+            "Disk Analyzer: {} mục, {} thư mục, {} ms (hủy: {})",
+            payload.items.len(),
+            payload.dirs_scanned,
+            payload.elapsed_ms,
+            payload.cancelled
+        );
+        state.finish();
+        let _ = app.emit("disk-scan-complete", &payload);
+    });
+
+    Ok(())
+}
+
+/// Tauri Command: Hủy phiên quét đang chạy
+#[tauri::command]
+pub async fn cancel_large_folder_scan(state: State<'_, Arc<DiskAnalyzerState>>) -> Result<(), AppError> {
+    state.request_cancel();
+    Ok(())
+}
+
+/// Tauri Command: Chuyển các mục Safe/Caution trong phiên quét vào Thùng rác
+#[tauri::command]
+pub async fn recycle_large_folder_items(
+    state: State<'_, Arc<DiskAnalyzerState>>,
+    scan_id: String,
+    item_ids: Vec<String>,
+) -> Result<RecycleResult, AppError> {
+    let state = state.inner().clone();
+    let result =
+        run_blocking(move || disk_analyzer::recycle_items(&state, &scan_id, &item_ids)).await?;
+
+    let log = OptimizationLog::new(
+        "Disk Analyzer",
+        result.recycled_bytes,
+        result.recycled_count,
+        0,
+        format!(
+            "Chuyển {} mục vào Thùng rác ({} mục thất bại)",
+            result.recycled_count, result.failed_count
+        ),
+    );
+    if let Err(e) = history::record_log(log) {
+        warn!("Không ghi được lịch sử Disk Analyzer: {:?}", e);
+    }
+    Ok(result)
+}
+
+/// Tauri Command: Mở Explorer tại một mục của phiên quét
+#[tauri::command]
+pub async fn open_disk_item_in_explorer(
+    state: State<'_, Arc<DiskAnalyzerState>>,
+    scan_id: String,
+    item_id: String,
+) -> Result<(), AppError> {
+    disk_analyzer::open_in_explorer(&state, &scan_id, &item_id)
 }
 
 // ==========================================

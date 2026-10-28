@@ -1,7 +1,9 @@
 pub mod cleaner;
 pub mod commands;
 pub mod config;
+pub mod disk_analyzer;
 pub mod error;
+pub mod folder_knowledge;
 pub mod history;
 pub mod http_server;
 pub mod metrics;
@@ -16,6 +18,7 @@ pub mod tray;
 use std::sync::Arc;
 
 use cleaner::CleanerSession;
+use disk_analyzer::DiskAnalyzerState;
 use metrics::MetricsState;
 use tracing::{error, info};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
@@ -50,6 +53,7 @@ pub fn run() {
     let builder = tauri::Builder::default()
         .manage(metrics_state.clone())
         .manage(Arc::new(CleanerSession::new()))
+        .manage(Arc::new(DiskAnalyzerState::new()))
         .invoke_handler(tauri::generate_handler![
             // Hardware & Diagnostics (Sprint 1)
             commands::get_hardware_metrics,
@@ -67,6 +71,11 @@ pub fn run() {
             // Disk Cleaner (Sprint 3)
             commands::scan_cleanable_files,
             commands::clean_files,
+            // Disk Analyzer
+            commands::start_large_folder_scan,
+            commands::cancel_large_folder_scan,
+            commands::recycle_large_folder_items,
+            commands::open_disk_item_in_explorer,
             // Windows Services
             commands::get_services,
             commands::set_service_startup,
