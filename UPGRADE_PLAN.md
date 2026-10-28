@@ -20,25 +20,27 @@
 `src-tauri/src/http_server.rs` không có xác thực, trả `Access-Control-Allow-Origin: *`, có endpoint kill process / xóa file / sửa startup / tạo restore point. Bất kỳ trang web nào đang mở trong trình duyệt đều gọi được.
 
 Sửa:
-- Chỉ khởi động server khi `cfg!(debug_assertions)` (bản release không có cổng mở).
-- Bỏ toàn bộ endpoint **POST** (thay đổi hệ thống). Chế độ trình duyệt chỉ để xem UI → chỉ giữ GET read-only (`metrics`, `system`, `processes`, `startup`, `cleaner/scan`, `history`).
-- CORS chỉ cho `http://localhost:1420` và `http://127.0.0.1:1420`; kiểm tra header `Origin`/`Host` (chống DNS rebinding) — sai thì 403.
-- Route match chính xác path (không dùng `starts_with` lỏng lẻo), giới hạn kích thước request.
-- `apiBridge.ts`: các hàm mutating khi không ở Tauri → ném lỗi "Chỉ khả dụng trong app desktop" thay vì gọi HTTP.
+- [x] Chỉ khởi động server khi `cfg!(debug_assertions)` (bản release không có cổng mở).
+- [x] Bỏ toàn bộ endpoint **POST** (thay đổi hệ thống). Chế độ trình duyệt chỉ để xem UI → chỉ giữ GET read-only (`metrics`, `system`, `processes`, `startup`, `cleaner/scan`, `history`).
+- [x] CORS chỉ cho `http://localhost:1420` và `http://127.0.0.1:1420`; kiểm tra header `Origin`/`Host` (chống DNS rebinding) — sai thì 403.
+- [x] Route match chính xác path (không dùng `starts_with` lỏng lẻo), giới hạn kích thước request.
+- [x] `apiBridge.ts`: các hàm mutating khi không ở Tauri → ném lỗi "Chỉ khả dụng trong app desktop" thay vì gọi HTTP.
 
 ### 1.2 `clean_files` xóa bất kỳ đường dẫn nào ngoài blacklist
 `cleaner::execute_clean_items` chỉ kiểm tra blacklist → frontend gửi `D:\Projects\...` hay `C:\Program Files\...` là bị xóa.
 
 Sửa:
-- Backend giữ `ScanSession` (trong Tauri state) chứa tập path từ lần quét gần nhất + scan id. `clean_files(scan_id, ids)` chỉ xóa item có trong session đó (whitelist theo kết quả quét, không tin path từ UI).
-- Thêm kiểm tra allow-root: path phải nằm dưới một trong các thư mục gốc được phép (`%TEMP%`, `%LOCALAPPDATA%\CrashDumps`, thumbcache...). So sánh trên path đã `canonicalize`, không dùng `contains`.
-- Từ chối symlink/junction (`symlink_metadata`), tránh bị dẫn ra ngoài.
-- Test: path ngoài session bị từ chối; path qua junction bị từ chối.
+- [x] Backend giữ `ScanSession` (trong Tauri state) chứa tập path từ lần quét gần nhất + scan id. `clean_files(scan_id, ids)` chỉ xóa item có trong session đó (whitelist theo kết quả quét, không tin path từ UI).
+- [x] Thêm kiểm tra allow-root: path phải nằm dưới một trong các thư mục gốc được phép (`%TEMP%`, `%LOCALAPPDATA%\CrashDumps`, thumbcache...). So sánh trên path đã `canonicalize`, không dùng `contains`.
+- [x] Từ chối symlink/junction (`symlink_metadata`), tránh bị dẫn ra ngoài.
+- [x] Test: path ngoài session bị từ chối; path qua junction bị từ chối.
 
 ### 1.3 Các điểm nhỏ
-- `tauri.conf.json`: đặt CSP thật (`default-src 'self'; style-src 'self' 'unsafe-inline' fonts.googleapis.com; font-src fonts.gstatic.com; connect-src ipc: http://ipc.localhost`).
-- `safety.rs::is_blacklisted_path` dùng `contains` → dễ chặn nhầm/thả nhầm; chuyển sang so sánh theo component path đã chuẩn hóa. Giữ nguyên toàn bộ test hiện có + thêm test.
-- Xóa đường dẫn hardcode `C:\Users\MSI\...` trong `src/services/apiBridge.ts`.
+- [x] `tauri.conf.json`: đặt CSP thật (`default-src 'self'; style-src 'self' 'unsafe-inline' fonts.googleapis.com; font-src fonts.gstatic.com; connect-src ipc: http://ipc.localhost`).
+- [x] `safety.rs::is_blacklisted_path` dùng `contains` → dễ chặn nhầm/thả nhầm; chuyển sang so sánh theo component path đã chuẩn hóa. Giữ nguyên toàn bộ test hiện có + thêm test.
+- [x] Xóa đường dẫn hardcode `C:\Users\MSI\...` trong `src/services/apiBridge.ts`.
+
+> Ghi chú: test Rust mới đã chạy `cargo check`/`clippy` cho target Windows trên Linux; `cargo test` đầy đủ chạy trên CI `windows-latest`. Logic thuần (`safety.rs`, `scan_session.rs`) đã chạy test được trên Linux.
 
 **DoD:** test Rust mới pass trên CI Windows; `curl -X POST 127.0.0.1:1421/...` không còn tác dụng; build release không mở cổng 1421.
 

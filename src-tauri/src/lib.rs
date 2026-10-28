@@ -8,9 +8,13 @@ pub mod metrics;
 pub mod process_guardian;
 pub mod restore_point;
 pub mod safety;
+pub mod scan_session;
 pub mod startup;
 pub mod tray;
 
+use std::sync::Arc;
+
+use cleaner::CleanerSession;
 use metrics::MetricsState;
 use tracing::{error, info};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
@@ -44,6 +48,7 @@ pub fn run() {
     // 3. Xây dựng Tauri Application Context
     let builder = tauri::Builder::default()
         .manage(metrics_state.clone())
+        .manage(Arc::new(CleanerSession::new()))
         .invoke_handler(tauri::generate_handler![
             // Hardware & Diagnostics (Sprint 1)
             commands::get_hardware_metrics,
@@ -112,7 +117,9 @@ pub fn run() {
             // Bắt đầu background metrics emitter
             metrics_state.start_background_loop(app.handle().clone(), poll_interval);
 
-            // Bắt đầu local HTTP API server cho trình duyệt (Chrome/Edge dev)
+            // HTTP server chỉ đọc cho chế độ xem UI trong trình duyệt — CHỈ có ở bản debug.
+            // Bản release không mở bất kỳ cổng mạng nào.
+            #[cfg(debug_assertions)]
             http_server::start_http_server(metrics_state.clone(), 1421);
 
             Ok(())

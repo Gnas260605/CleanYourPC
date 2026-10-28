@@ -1,8 +1,10 @@
+use std::sync::Arc;
+
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, State, Window};
-use tracing::info;
+use tracing::{info, warn};
 
-use crate::cleaner::{self, CleanResult, CleanableItem};
+use crate::cleaner::{self, CleanResult, CleanScanResult, CleanerSession};
 use crate::config::{self, AppSettings};
 use crate::error::AppError;
 use crate::history::{self, HistorySummary, OptimizationLog};
@@ -146,16 +148,53 @@ pub async fn optimize_process_working_set(pid: u32) -> Result<bool, AppError> {
 // DISK CLEANER COMMANDS (Sprint 3)
 // ==========================================
 
-/// Tauri Command: Quét tìm các tệp tin có thể dọn dẹp (Dry-Run: chỉ tính dung lượng)
-#[tauri::command]
-pub async fn scan_cleanable_files() -> Result<Vec<CleanableItem>, AppError> {
-    cleaner::scan_cleanable_items()
+/// Chạy tác vụ chặn (I/O, quét đĩa) trên thread pool riêng để không treo UI
+async fn run_blocking<T, F>(f: F) -> Result<T, AppError>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, AppError> + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(f)
+        .await
+        .map_err(|e| AppError::Unknown(format!("Tác vụ nền bị hủy: {}", e)))?
 }
 
-/// Tauri Command: Thực thi dọn dẹp các tệp tin đã chọn (xử lý an toàn Locked Files)
+/// Tauri Command: Quét tìm các tệp tin có thể dọn dẹp (Dry-Run: chỉ tính dung lượng).
+/// Kết quả được lưu vào phiên quét của backend; frontend nhận `scan_id` để dọn sau.
 #[tauri::command]
-pub async fn clean_files(paths: Vec<String>) -> Result<CleanResult, AppError> {
-    cleaner::execute_clean_items(paths)
+pub async fn scan_cleanable_files(
+    session: State<'_, Arc<CleanerSession>>,
+) -> Result<CleanScanResult, AppError> {
+    let session = session.inner().clone();
+    run_blocking(move || cleaner::scan_into_session(&session)).await
+}
+
+/// Tauri Command: Dọn các mục đã chọn theo id trong phiên quét (không nhận đường dẫn thô từ UI)
+#[tauri::command]
+pub async fn clean_files(
+    session: State<'_, Arc<CleanerSession>>,
+    scan_id: String,
+    item_ids: Vec<String>,
+) -> Result<CleanResult, AppError> {
+    let session = session.inner().clone();
+    let result =
+        run_blocking(move || cleaner::clean_from_session(&session, &scan_id, &item_ids)).await?;
+
+    let log = OptimizationLog::new(
+        "Safe Cleaner",
+        result.freed_bytes,
+        result.success_count,
+        result.skipped_locked_count,
+        format!(
+            "Dọn {} tệp rác trong phiên quét (thất bại {}, bị khóa {})",
+            result.success_count, result.failed_count, result.skipped_locked_count
+        ),
+    );
+    if let Err(e) = history::record_log(log) {
+        warn!("Không ghi được lịch sử dọn dẹp: {:?}", e);
+    }
+
+    Ok(result)
 }
 
 // ==========================================

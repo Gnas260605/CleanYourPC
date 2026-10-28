@@ -118,6 +118,12 @@ export interface CleanableItem {
   selected?: boolean;
 }
 
+/** Kết quả quét Dry-Run: backend giữ phiên quét theo `scan_id` */
+export interface CleanScanResult {
+  scan_id: string;
+  items: CleanableItem[];
+}
+
 export interface CleanResult {
   freed_bytes: number;
   success_count: number;

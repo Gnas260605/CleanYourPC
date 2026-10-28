@@ -28,22 +28,40 @@ pub enum DeletionOutcome {
 pub struct PathSafetyValidator;
 
 impl PathSafetyValidator {
-    /// Danh sách các thư mục hệ thống cấm tuyệt đối (lowercase)
-    const FORBIDDEN_SYSTEM_DIRS: &'static [&'static str] = &[
-        r"\windows\system32",
-        r"\windows\syswow64",
-        r"\boot",
-        r"\efi",
-        r"$recycle.bin",
+    /// Các chuỗi thư mục hệ thống cấm tuyệt đối, so khớp liên tiếp theo component ở bất kỳ vị trí nào (lowercase)
+    const FORBIDDEN_SYSTEM_SEQUENCES: &'static [&'static [&'static str]] = &[
+        &["windows", "system32"],
+        &["windows", "syswow64"],
+        &["windows", "winsxs"],
     ];
 
-    /// Danh sách thư mục hồ sơ cá nhân thiết yếu (lowercase)
+    /// Thư mục cấm khi nằm ngay dưới gốc ổ đĩa (C:\Boot, C:\EFI)
+    const FORBIDDEN_ROOT_DIRS: &'static [&'static str] = &["boot", "efi"];
+
+    /// Component cấm ở bất kỳ vị trí nào
+    const FORBIDDEN_ANY_COMPONENT: &'static [&'static str] = &["$recycle.bin", "system volume information"];
+
+    /// Danh sách thư mục hồ sơ cá nhân thiết yếu (lowercase, so khớp nguyên component)
     const FORBIDDEN_USER_FOLDERS: &'static [&'static str] = &[
-        r"\desktop",
-        r"\documents",
-        r"\pictures",
-        r"\downloads",
-        r"\videos",
+        "desktop",
+        "documents",
+        "pictures",
+        "downloads",
+        "videos",
+        "music",
+        "favorites",
+        "contacts",
+        "saved games",
+        ".ssh",
+    ];
+
+    /// Thư mục gốc quan trọng: cấm xóa chính nó (nhưng thư mục con vẫn được xét bằng luật khác)
+    const FORBIDDEN_EXACT_DIRS: &'static [&'static [&'static str]] = &[
+        &["users"],
+        &["windows"],
+        &["program files"],
+        &["program files (x86)"],
+        &["programdata"],
     ];
 
     /// Danh sách tệp cơ sở dữ liệu trình duyệt cấm tuyệt đối (lowercase)
@@ -61,10 +79,34 @@ impl PathSafetyValidator {
         "audioendpointbuilder",
         "audiosrv",
         "rpcss",
+        "rpceptmapper",
         "dcomlaunch",
         "eventlog",
         "plugplay",
         "lanmanworkstation",
+        "power",
+        "profsvc",
+        "samss",
+        "schedule",
+        "winmgmt",
+        "wuauserv",
+        "trustedinstaller",
+        "bfe",
+        "mpssvc",
+        "windefend",
+        "cryptsvc",
+        "dhcp",
+        "dnscache",
+        "nsi",
+        "lsm",
+        "gpsvc",
+        "usermanager",
+        "coremessagingregistrar",
+        "brokerinfrastructure",
+        "systemeventsbroker",
+        "themes",
+        "wlansvc",
+        "netprofm",
     ];
 
     /// Danh sách Registry Startup keys được phép can thiệp theo RULE.md
@@ -82,45 +124,164 @@ impl PathSafetyValidator {
         s.replace('/', r"\")
     }
 
-    /// Kiểm tra xem một đường dẫn có nằm trong danh sách cấm tuyệt đối hay không
-    pub fn is_blacklisted_path(path: &Path) -> bool {
+    /// Tách đường dẫn thành (ổ đĩa, danh sách component) đã chuẩn hóa chữ thường.
+    /// Bỏ tiền tố verbatim `\\?\` / `\\?\UNC\` do `canonicalize` sinh ra, bỏ component rỗng và ".".
+    /// Không phụ thuộc hệ điều hành để hành vi kiểm tra là xác định.
+    pub fn path_components(path: &Path) -> (Option<String>, Vec<String>) {
         let normalized = Self::normalize_path_str(path);
+        let mut rest = normalized.as_str();
+        if let Some(stripped) = rest.strip_prefix(r"\\?\unc\") {
+            rest = stripped;
+        } else if let Some(stripped) = rest.strip_prefix(r"\\?\") {
+            rest = stripped;
+        } else if let Some(stripped) = rest.strip_prefix(r"\\.\") {
+            rest = stripped;
+        }
 
-        // 1. Chống Directory Traversal: Nếu đường dẫn chứa ".." thì coi như nguy hiểm
-        if normalized.contains(r"\..\") || normalized.ends_with(r"\..") || normalized.starts_with(r"..\") {
+        let mut parts: Vec<String> = rest
+            .split('\\')
+            .map(|p| p.trim_end_matches(' ').to_string())
+            .filter(|p| !p.is_empty() && p != ".")
+            .collect();
+
+        let drive = match parts.first() {
+            Some(first) if first.len() == 2 && first.ends_with(':') => Some(parts.remove(0)),
+            _ => None,
+        };
+        (drive, parts)
+    }
+
+    /// Kiểm tra xem một đường dẫn có nằm trong danh sách cấm tuyệt đối hay không.
+    /// So sánh theo từng component (không dùng `contains` trên chuỗi) để tránh chặn nhầm/thả nhầm.
+    pub fn is_blacklisted_path(path: &Path) -> bool {
+        let (drive, comps) = Self::path_components(path);
+
+        // 0. Đường dẫn rỗng hoặc chính gốc ổ đĩa
+        if comps.is_empty() {
             return true;
         }
 
-        // 2. Kiểm tra các thư mục hệ thống cấm
-        for dir in Self::FORBIDDEN_SYSTEM_DIRS {
-            if normalized.contains(dir) {
+        // 1. Chống Directory Traversal: bất kỳ component ".." nào đều bị coi là nguy hiểm
+        if comps.iter().any(|c| c == "..") {
+            return true;
+        }
+
+        // 2. Thư mục hệ thống cấm (chuỗi component liên tiếp)
+        for seq in Self::FORBIDDEN_SYSTEM_SEQUENCES {
+            if comps.windows(seq.len()).any(|w| w.iter().zip(seq.iter()).all(|(a, b)| a == b)) {
+                return true;
+            }
+        }
+        if comps.iter().any(|c| Self::FORBIDDEN_ANY_COMPONENT.contains(&c.as_str())) {
+            return true;
+        }
+        if drive.is_some() && Self::FORBIDDEN_ROOT_DIRS.contains(&comps[0].as_str()) {
+            return true;
+        }
+
+        // 3. Chính các thư mục gốc quan trọng (C:\Users, C:\Windows, C:\Program Files...)
+        for exact in Self::FORBIDDEN_EXACT_DIRS {
+            if comps.len() == exact.len() && comps.iter().zip(exact.iter()).all(|(a, b)| a == b) {
                 return true;
             }
         }
 
-        // 3. Kiểm tra các thư mục hồ sơ người dùng thiết yếu (Desktop, Documents, Downloads,...)
-        for folder in Self::FORBIDDEN_USER_FOLDERS {
-            // Kiểm tra nếu là thư mục con trong Users (ví dụ \users\msi\desktop...) hoặc kết thúc bằng thư mục đó
-            if normalized.contains(&format!(r"\users\")) && normalized.contains(folder) {
+        // 4. Chính thư mục hồ sơ người dùng (C:\Users\<tên>) và các thư mục AppData gốc
+        if comps[0] == "users" {
+            if comps.len() == 2 {
                 return true;
             }
-            // Trường hợp đường dẫn trực tiếp như C:\Users\Public\Desktop hoặc C:\Desktop
-            if normalized.ends_with(folder) || normalized.contains(&format!(r"{}\", folder)) {
+            if comps.len() >= 3 && comps[2] == "appdata" && comps.len() <= 4 {
                 return true;
             }
         }
 
-        // 4. Kiểm tra các tệp nhạy cảm của trình duyệt (Login Data, Cookies, Bookmarks, ...)
-        if let Some(file_name) = path.file_name() {
-            let fname_lower = file_name.to_string_lossy().to_lowercase();
+        // 5. Thư mục hồ sơ cá nhân thiết yếu ở bất kỳ cấp nào (Desktop, Documents, Downloads, OneDrive, .ssh...)
+        for comp in &comps {
+            if Self::FORBIDDEN_USER_FOLDERS.contains(&comp.as_str()) || comp.starts_with("onedrive") {
+                return true;
+            }
+        }
+
+        // 6. Các tệp nhạy cảm của trình duyệt (Login Data, Cookies, Bookmarks, ...)
+        if let Some(fname_lower) = comps.last() {
             for db_file in Self::FORBIDDEN_BROWSER_FILES {
-                if fname_lower == *db_file || fname_lower.starts_with(&format!("{}.", db_file)) {
+                if fname_lower == db_file || fname_lower.starts_with(&format!("{}.", db_file)) {
                     return true;
                 }
             }
         }
 
         false
+    }
+
+    /// Kiểm tra `path` có nằm dưới (hoặc trùng) `root` hay không, so sánh theo component không phân biệt hoa thường.
+    /// Cả hai đường dẫn nên được `canonicalize` trước khi gọi.
+    pub fn is_under_root(path: &Path, root: &Path) -> bool {
+        let (p_drive, p_comps) = Self::path_components(path);
+        let (r_drive, r_comps) = Self::path_components(root);
+        if r_comps.is_empty() || p_drive != r_drive || p_comps.len() < r_comps.len() {
+            return false;
+        }
+        p_comps.iter().zip(r_comps.iter()).all(|(a, b)| a == b)
+    }
+
+    /// Từ chối symlink / junction / mọi reparse point (không đi theo liên kết).
+    pub fn ensure_not_link(path: &Path) -> AppResult<fs::Metadata> {
+        let meta = fs::symlink_metadata(path).map_err(AppError::from)?;
+        if meta.file_type().is_symlink() || Self::is_reparse_point(&meta) {
+            warn!("🛑 Từ chối symlink/junction: {:?}", path);
+            return Err(AppError::InvalidPath(format!(
+                "Đường dẫn '{}' là symlink/junction, không được phép thao tác",
+                path.display()
+            )));
+        }
+        Ok(meta)
+    }
+
+    #[cfg(windows)]
+    fn is_reparse_point(meta: &fs::Metadata) -> bool {
+        use std::os::windows::fs::MetadataExt;
+        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+        meta.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
+    }
+
+    #[cfg(not(windows))]
+    fn is_reparse_point(_meta: &fs::Metadata) -> bool {
+        false
+    }
+
+    /// Kiểm tra đầy đủ một mục tiêu xóa:
+    /// 1. Không thuộc blacklist (trước và sau khi canonicalize).
+    /// 2. Bản thân không phải symlink/junction.
+    /// 3. Đường dẫn thật (đã canonicalize, nên junction ở thư mục cha cũng bị lộ ra) nằm dưới một allow-root.
+    ///
+    /// Trả về đường dẫn đã canonicalize để thao tác xóa dùng đúng đối tượng đã kiểm tra.
+    pub fn validate_delete_target(path: &Path, allowed_roots: &[PathBuf]) -> AppResult<PathBuf> {
+        Self::validate_cleanable_path(path)?;
+        Self::ensure_not_link(path)?;
+
+        let canonical = fs::canonicalize(path).map_err(AppError::from)?;
+        if Self::is_blacklisted_path(&canonical) {
+            return Err(AppError::InvalidPath(format!(
+                "Đường dẫn thật '{}' nằm trong danh sách cấm",
+                canonical.display()
+            )));
+        }
+
+        let inside = allowed_roots.iter().any(|root| match fs::canonicalize(root) {
+            Ok(root_canon) => Self::is_under_root(&canonical, &root_canon) && canonical != root_canon,
+            Err(_) => false,
+        });
+        if !inside {
+            warn!("🛑 CHẶN: {:?} nằm ngoài các thư mục gốc được phép", canonical);
+            return Err(AppError::InvalidPath(format!(
+                "Đường dẫn '{}' nằm ngoài các thư mục được phép dọn dẹp",
+                path.display()
+            )));
+        }
+
+        Ok(canonical)
     }
 
     /// Xác thực đường dẫn có an toàn để kiểm tra / dọn dẹp không.
@@ -321,6 +482,107 @@ mod tests {
         let p_dumps = Path::new(r"C:\Users\MSI\AppData\Local\CrashDumps\app_crash_882.dmp");
         assert!(!PathSafetyValidator::is_blacklisted_path(p_dumps));
         assert!(PathSafetyValidator::validate_cleanable_path(p_dumps).is_ok());
+    }
+
+    #[test]
+    fn test_blacklist_component_based_no_false_positive() {
+        // Trước đây dùng `contains("\\desktop")` nên chặn nhầm tệp desktop.ini trong Temp
+        let p_ini = Path::new(r"C:\Users\MSI\AppData\Local\Temp\desktop.ini.tmp");
+        assert!(!PathSafetyValidator::is_blacklisted_path(p_ini));
+
+        // "bootstrap" không phải thư mục C:\Boot
+        let p_boot = Path::new(r"C:\Users\MSI\AppData\Local\Temp\bootstrap_cache\a.tmp");
+        assert!(!PathSafetyValidator::is_blacklisted_path(p_boot));
+
+        // "historyfile.tmp" không phải tệp History của trình duyệt
+        let p_hist = Path::new(r"C:\Users\MSI\AppData\Local\Temp\historyfile.tmp");
+        assert!(!PathSafetyValidator::is_blacklisted_path(p_hist));
+    }
+
+    #[test]
+    fn test_blacklist_roots_and_verbatim_prefix() {
+        assert!(PathSafetyValidator::is_blacklisted_path(Path::new(r"C:\")));
+        assert!(PathSafetyValidator::is_blacklisted_path(Path::new(r"C:\Users")));
+        assert!(PathSafetyValidator::is_blacklisted_path(Path::new(r"C:\Users\MSI")));
+        assert!(PathSafetyValidator::is_blacklisted_path(Path::new(r"C:\Users\MSI\AppData\Local")));
+        assert!(PathSafetyValidator::is_blacklisted_path(Path::new(r"C:\Program Files")));
+        assert!(PathSafetyValidator::is_blacklisted_path(Path::new(r"C:\Windows")));
+        assert!(PathSafetyValidator::is_blacklisted_path(Path::new(r"\\?\C:\Windows\System32\cmd.exe")));
+        assert!(PathSafetyValidator::is_blacklisted_path(Path::new(r"C:\Users\MSI\OneDrive - Contoso\a.docx")));
+        assert!(PathSafetyValidator::is_blacklisted_path(Path::new(r"C:\Users\MSI\.ssh\id_ed25519")));
+        assert!(PathSafetyValidator::is_blacklisted_path(Path::new(r"C:\Windows\WinSxS\Temp")));
+        // Thư mục con hợp lệ của Program Files vẫn được xét bằng luật khác (không bị chặn bởi luật "exact")
+        assert!(!PathSafetyValidator::is_blacklisted_path(Path::new(r"C:\Program Files\App\cache.tmp")));
+    }
+
+    #[test]
+    fn test_is_under_root_component_compare() {
+        let root = Path::new(r"\\?\C:\Users\MSI\AppData\Local\Temp");
+        assert!(PathSafetyValidator::is_under_root(Path::new(r"\\?\C:\Users\MSI\AppData\Local\Temp\a.tmp"), root));
+        assert!(PathSafetyValidator::is_under_root(Path::new(r"C:\users\msi\appdata\local\temp\x\y.tmp"), root));
+        // Tiền tố chuỗi giống nhưng khác component: Temp2 không nằm dưới Temp
+        assert!(!PathSafetyValidator::is_under_root(Path::new(r"C:\Users\MSI\AppData\Local\Temp2\a.tmp"), root));
+        assert!(!PathSafetyValidator::is_under_root(Path::new(r"D:\Users\MSI\AppData\Local\Temp\a.tmp"), root));
+        assert!(!PathSafetyValidator::is_under_root(Path::new(r"C:\Users\MSI"), root));
+    }
+
+    #[test]
+    fn test_validate_delete_target_rejects_outside_root() {
+        let temp_dir = env::temp_dir();
+        let inside = temp_dir.join("winpulse_root_check_inside.tmp");
+        if File::create(&inside).is_err() {
+            return;
+        }
+        let roots = vec![temp_dir.clone()];
+        assert!(PathSafetyValidator::validate_delete_target(&inside, &roots).is_ok());
+
+        // Cùng tệp nhưng allow-root là một thư mục khác → bị từ chối
+        let other_root = temp_dir.join("winpulse_other_root_dir");
+        let _ = fs::create_dir_all(&other_root);
+        assert!(PathSafetyValidator::validate_delete_target(&inside, std::slice::from_ref(&other_root)).is_err());
+
+        // Không được xóa chính thư mục gốc
+        assert!(PathSafetyValidator::validate_delete_target(&other_root, std::slice::from_ref(&other_root)).is_err());
+
+        let _ = fs::remove_file(&inside);
+        let _ = fs::remove_dir(&other_root);
+    }
+
+    #[test]
+    fn test_validate_delete_target_rejects_junction() {
+        // Tạo junction %TEMP%\winpulse_junction_test -> thư mục nằm ngoài allow-root
+        let temp_dir = env::temp_dir();
+        let outside = temp_dir.join("winpulse_junction_target");
+        let allowed = temp_dir.join("winpulse_junction_allowed");
+        let link = allowed.join("link");
+        let _ = fs::create_dir_all(&outside);
+        let _ = fs::create_dir_all(&allowed);
+        let victim = outside.join("victim.txt");
+        if File::create(&victim).is_err() {
+            return;
+        }
+
+        let status = std::process::Command::new("cmd")
+            .args(["/C", "mklink", "/J"])
+            .arg(&link)
+            .arg(&outside)
+            .status();
+        if !matches!(status, Ok(s) if s.success()) {
+            let _ = fs::remove_file(&victim);
+            return;
+        }
+
+        let roots = vec![allowed.clone()];
+        // Bản thân junction bị từ chối
+        assert!(PathSafetyValidator::validate_delete_target(&link, &roots).is_err());
+        // Tệp đi qua junction: đường dẫn thật nằm ngoài allow-root → bị từ chối
+        assert!(PathSafetyValidator::validate_delete_target(&link.join("victim.txt"), &roots).is_err());
+        assert!(victim.exists());
+
+        let _ = fs::remove_dir(&link);
+        let _ = fs::remove_file(&victim);
+        let _ = fs::remove_dir(&outside);
+        let _ = fs::remove_dir(&allowed);
     }
 
     #[test]

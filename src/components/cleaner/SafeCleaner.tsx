@@ -16,7 +16,6 @@ import {
 import { CleanableItem, CleanResult, CleanerCategory } from "@/types";
 import { formatBytes } from "@/utils/formatters";
 import { scanCleanableFiles, cleanFiles, createRestorePoint } from "@/services/apiBridge";
-import { logOptimizationSession } from "@/utils/historyLogger";
 
 interface SafeCleanerProps {
   onNotify: (msg: string) => void;
@@ -25,6 +24,7 @@ interface SafeCleanerProps {
 export const SafeCleaner: React.FC<SafeCleanerProps> = ({ onNotify }) => {
   const [selectedCategory, setSelectedCategory] = useState<CleanerCategory | "All">("Safe");
   const [files, setFiles] = useState<CleanableItem[]>([]);
+  const [scanId, setScanId] = useState<string>("");
   const [isScanning, setIsScanning] = useState(false);
   const [hasScanned, setHasScanned] = useState(false);
   const [isCleaning, setIsCleaning] = useState(false);
@@ -70,24 +70,24 @@ export const SafeCleaner: React.FC<SafeCleanerProps> = ({ onNotify }) => {
   };
 
   // Trigger Dry-Run Scan via Windows Native Engine
-  const handleRunDryRunScan = async () => {
+  const handleRunDryRunScan = async (silent = false) => {
     setIsScanning(true);
-    setCleanResult(null);
+    if (!silent) setCleanResult(null);
 
     try {
-      const scanned = await scanCleanableFiles();
-      if (Array.isArray(scanned) && scanned.length > 0) {
-        const mapped = scanned.map((item, idx) => ({
+      const { scan_id, items: scanned } = await scanCleanableFiles();
+      setScanId(scan_id);
+      setHasScanned(true);
+      setFiles(
+        scanned.map((item) => ({
           ...item,
-          id: item.id || `scanned-${idx}`,
           selected: item.category === "Safe" || item.category === "Balanced",
-        }));
-        setFiles(mapped);
-        setHasScanned(true);
+        }))
+      );
+      if (silent) return;
+      if (scanned.length > 0) {
         onNotify(`Quét Dry-Run thực tế hoàn tất: Tìm thấy ${scanned.length} tệp rác an toàn theo WhiteList.`);
       } else {
-        setFiles([]);
-        setHasScanned(true);
         onNotify("Hệ thống rất sạch sẽ! Không tìm thấy tệp rác nào cũ hơn 24 giờ.");
       }
     } catch (err: unknown) {
@@ -121,19 +121,13 @@ export const SafeCleaner: React.FC<SafeCleanerProps> = ({ onNotify }) => {
     setConfirmModalOpen(false);
     setIsCleaning(true);
 
-    const pathsToClean = selectedFiles.map((f) => f.path);
+    // Chỉ gửi id trong phiên quét; backend tự tra đường dẫn và ghi lịch sử
+    const idsToClean = selectedFiles.map((f) => f.id);
     try {
-      const result = await cleanFiles(pathsToClean);
+      const result = await cleanFiles(scanId, idsToClean);
       setCleanResult(result);
-      setFiles((prev) => prev.filter((f) => !f.selected || !visibleFiles.includes(f)));
-
-      await logOptimizationSession(
-        "Safe Cleaner",
-        result.freed_bytes,
-        result.success_count,
-        result.skipped_locked_count,
-        `Dọn dẹp thành công ${result.success_count} tệp tin rác WhiteList`
-      );
+      // Quét lại để danh sách phản ánh đúng trạng thái thật (tệp khóa/thất bại vẫn còn)
+      await handleRunDryRunScan(true);
 
       onNotify(
         `Dọn dẹp hoàn tất! Đã giải phóng thực tế ${formatBytes(result.freed_bytes)} (${result.success_count} tệp đã xóa, ${result.skipped_locked_count} tệp khóa bỏ qua an toàn).`
@@ -195,7 +189,7 @@ export const SafeCleaner: React.FC<SafeCleanerProps> = ({ onNotify }) => {
 
             {/* Dry Run Scan Button */}
             <button
-              onClick={handleRunDryRunScan}
+              onClick={() => handleRunDryRunScan()}
               disabled={isScanning}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-surface-850 hover:bg-surface-800 text-cyan-300 hover:text-white border border-cyan-500/30 text-xs font-semibold transition-all active:scale-95 disabled:opacity-50"
             >

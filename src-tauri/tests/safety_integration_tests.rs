@@ -5,7 +5,7 @@ use std::os::windows::fs::OpenOptionsExt;
 use std::path::Path;
 use std::time::Instant;
 
-use app_lib::cleaner::execute_clean_items;
+use app_lib::cleaner::execute_clean_paths;
 use app_lib::config::{load_settings_from_path, save_settings_to_path, AppSettings};
 use app_lib::error::AppError;
 use app_lib::history::{
@@ -48,19 +48,14 @@ fn test_integration_zero_harm_cleaner_lifecycle() {
     let blacklist_file = r"C:\Windows\System32\drivers\etc\hosts".to_string();
 
     let items_to_clean = vec![
-        normal_file.to_string_lossy().to_string(),
-        locked_file.to_string_lossy().to_string(),
-        blacklist_file,
+        normal_file.clone(),
+        locked_file.clone(),
+        std::path::PathBuf::from(blacklist_file),
     ];
 
-    // 4. Thực thi dọn dẹp 3 tệp tin cùng lúc
-    let result = execute_clean_items(items_to_clean);
-    assert!(
-        result.is_ok(),
-        "Thực thi dọn dẹp hàng loạt không được gây panic hay trả về Err tổng thể"
-    );
-
-    let clean_res = result.unwrap();
+    // 4. Thực thi dọn dẹp 3 tệp tin cùng lúc (allow-root: %TEMP%)
+    // Không panic, không trả về Err tổng thể: kết quả luôn là thống kê từng tệp
+    let clean_res = execute_clean_paths(&items_to_clean, std::slice::from_ref(&temp_dir));
     // Normal file: thành công (1)
     assert_eq!(clean_res.success_count, 1);
     // Locked file: bỏ qua an toàn (1)
