@@ -10,10 +10,10 @@ Follow `UPGRADE_PLAN.md` in order (phase 1 security fixes first). Tick boxes the
 - Backend (Windows only): `cd src-tauri && cargo test`, `cargo clippy -- -D warnings`.
 - App: `npx @tauri-apps/cli dev`.
 
-On a Linux/cloud machine the Rust crate cannot be built or tested (uses `windows` crate and `std::os::windows`). Use the `verify-change` skill to see what can be checked there; Windows CI is the source of truth.
+On a Linux/cloud machine the Rust crate cannot be linked or fully tested (uses `windows` crate and `std::os::windows`), but `cargo check`/`cargo clippy --target x86_64-pc-windows-msvc` work. Use the `verify-change` skill to see what can be checked there; Windows CI (`.github/workflows/ci.yml`) is the source of truth.
 
 ## Architecture in one paragraph
-`lib.rs` registers every `#[tauri::command]` from `commands.rs`; commands are thin wrappers over modules (`cleaner`, `process_guardian`, `startup`, `restore_point`, `metrics`, `config`, `history`, `tray`). All file deletion must go through `safety.rs` (`PathSafetyValidator`, `SafeFileOps`). Frontend calls the backend only via `src/services/apiBridge.ts` (and `useHardwareMetrics` for metrics); types mirror Rust structs in `src/types/index.ts`.
+`lib.rs` registers every `#[tauri::command]` from `commands.rs`; commands are thin wrappers over modules (`cleaner`, `disk_analyzer` + `folder_knowledge`, `services`, `process_guardian`, `startup`, `restore_point`, `metrics`, `config`, `history`, `tray`). Deletes take `(scan_id, item_ids)` from a backend `scan_session`, never raw paths. `http_server.rs` is debug-only and GET-only. All file deletion must go through `safety.rs` (`PathSafetyValidator`, `SafeFileOps`). Frontend calls the backend only via `src/services/apiBridge.ts` (and `useHardwareMetrics` for metrics); types mirror Rust structs in `src/types/index.ts`.
 
 ## Hard rules (from RULE.md)
 - Any code that deletes files, kills processes, edits registry or services: run the `zero-harm-review` skill before considering it done.

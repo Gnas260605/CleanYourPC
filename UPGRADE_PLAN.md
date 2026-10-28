@@ -138,7 +138,8 @@ Trong `.claude/skills/`:
 - `zero-harm-review` — checklist bắt buộc trước khi merge code xóa/kill/sửa registry/service.
 - `add-tauri-command` — quy trình thêm 1 command end-to-end (Rust module → `commands.rs` → `lib.rs` → `types` → `apiBridge.ts`).
 - `verify-change` — cách kiểm tra trên cloud Linux (tsc, vite build, `cargo check` có giới hạn) và trên Windows/CI.
-- Bổ sung dần: `folder-knowledge-rule` (cách thêm luật phân loại thư mục kèm test) khi làm giai đoạn 3.
+- [x] `folder-knowledge-rule` (cách thêm luật phân loại thư mục kèm test) — `.claude/skills/folder-knowledge-rule/SKILL.md`.
+- [x] `verify-change` cập nhật: `cargo clippy --target x86_64-pc-windows-msvc` chạy được trên Linux; chạy test logic thuần qua crate tạm.
 
 ---
 
